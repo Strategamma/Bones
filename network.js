@@ -2,7 +2,7 @@ export const net = { mode: null, state: null, socket: null, url: '', token: '', 
 const shell = document.createElement('div');
 shell.id = 'table-setup';
 shell.hidden = true;
-shell.innerHTML = `<form id="table-form"><div class="table-kicker">DECADENCE ARCADE</div><h2 id="table-title">Join a table</h2><p id="table-detail"></p><label>Your name<input id="table-name" maxlength="32" autocomplete="nickname" required></label><label id="address-label">Server address<input id="table-address" type="text" inputmode="url" required placeholder="https://your-game.onrender.com"></label><label>Table code · leave empty to create<input id="table-code" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="ABC123"></label><p id="table-error" role="alert"></p><button type="submit">CONTINUE</button><button type="button" id="table-resume" hidden>RESUME PREVIOUS TABLE</button><button type="button" id="table-back">BACK</button></form>`;
+shell.innerHTML = `<form id="table-form"><div class="table-kicker">✦ DECADENCE ARCADE ✦</div><h2 id="table-title">Join a table</h2><p id="table-detail"></p><button type="button" id="table-change-server" hidden>CHANGE SERVER ADDRESS</button><label>Your name<input id="table-name" maxlength="32" autocomplete="nickname" required></label><label id="address-label"><span id="address-title">Server address</span><input id="table-address" type="text" inputmode="url" required></label><label>Have a table code?<input id="table-code" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="Enter code to join · or leave blank"></label><p id="table-error" role="alert"></p><button type="submit" id="table-submit">CREATE TABLE</button><button type="button" id="table-resume" hidden>RESUME PREVIOUS TABLE</button><button type="button" id="table-back">BACK TO TABLES</button></form>`;
 document.body.append(shell);
 const $ = s => shell.querySelector(s);
 function normalizeUrl(raw, mode) {
@@ -20,15 +20,22 @@ function localServer() { return ['localhost', '127.0.0.1'].includes(location.hos
 export function openTable(mode, name, code = '') {
   net.mode = mode; net.state = null; net.error = ''; net.localStage = ''; net.manualClose = false;
   $('#table-title').textContent = mode === 'lan' ? 'LAN TABLE' : 'INTERNET TABLE';
-  $('#table-detail').textContent = mode === 'lan' ? 'Everyone joins from the same Wi‑Fi. Enter the computer’s local address.' : 'Friends join from anywhere. Enter your Render service address.';
+  $('#table-detail').textContent = mode === 'lan' ? 'Play together on the same Wi-Fi. Each player uses their own phone.' : 'Play together from anywhere. Each player uses their own phone.';
   $('#table-name').value = name || stored('skull-name');
   $('#table-address').value = new URLSearchParams(location.search).get('server') || stored(`skull-${mode}-url`) || (mode === 'lan' && localServer() ? location.origin : mode === 'internet' && location.hostname.endsWith('onrender.com') ? location.origin : '');
   $('#table-code').value = code;
+  $('#address-title').textContent = mode === 'lan' ? 'LAN server address' : 'Internet server address';
+  $('#table-address').placeholder = mode === 'lan' ? 'http://192.168.1.10:3000' : 'https://your-game.onrender.com';
+  $('#address-label').hidden = !!$('#table-address').value;
+  $('#table-change-server').hidden = !$('#address-label').hidden;
+  $('#table-submit').textContent = code ? 'JOIN TABLE' : 'CREATE TABLE';
   $('#table-resume').hidden = lastSeat()?.mode !== mode;
   $('#table-error').textContent = '';
   shell.hidden = false;
   net.onChange();
 }
+$('#table-code').addEventListener('input', () => { $('#table-submit').textContent = $('#table-code').value.trim() ? 'JOIN TABLE' : 'CREATE TABLE'; });
+$('#table-change-server').addEventListener('click', () => { $('#address-label').hidden = false; $('#table-change-server').hidden = true; $('#table-address').focus(); });
 $('#table-back').addEventListener('click', () => { shell.hidden = true; net.mode = null; net.onChange(); });
 $('#table-resume').addEventListener('click', () => {
   const saved = lastSeat();
@@ -125,7 +132,7 @@ async function shareInvite() {
   net.onChange();
 }
 export function drawTable(ui) {
-  const { header, panel, txt, button, disc, H, colors } = ui;
+  const { header, panel, txt, button, disc, cardChoice, art, H, colors } = ui;
   const s = net.state;
   if (!s) {
     header(net.mode === 'lan' ? 'LAN TABLE' : 'INTERNET TABLE', net.connected ? 'Connecting to the table…' : 'Enter your server address and name.');
@@ -135,16 +142,32 @@ export function drawTable(ui) {
     return;
   }
   const me = s.seat, mine = s.seats[me], turn = s.turn === me, host = s.host === me;
-  header(s.stage === 'lobby' ? `${s.mode.toUpperCase()} TABLE` : `ROUND ${s.round} · ${s.stage.toUpperCase().replace('-', ' ')}`, s.stage === 'lobby' ? `Share code ${s.code} with friends` : s.last || `${s.seats[s.turn]?.name || 'Player'} to act`);
+  const titles={lobby:`${s.mode.toUpperCase()} TABLE`,place:'PLACE A DISC',add:'ADD OR BID',bid:'THE BIDDING',reveal:'THE REVEAL',loss:'SKULL REVEALED','choose-lead':'CHOOSE THE LEAD',result:'ROUND COMPLETE',win:'GAME OVER',paused:'TABLE PAUSED'};
+  header(titles[s.stage]||'SKULL TABLE',s.stage==='lobby'?`Code ${s.code} · invite your friends`:`Round ${s.round} · ${s.last||`${s.seats[s.turn]?.name||'Player'} to act`}`);
+  if(s.stage==='win'){
+    const lift=ui.reducedMotion?0:Math.sin(ui.clock*2.5)*5;
+    const zoom=ui.reducedMotion?1:Math.min(1,.75+ui.phaseAge*.7);
+    art('winner-crown',195-109*zoom,H*.32+lift,218*zoom,150*zoom);
+    txt(`${s.seats[s.winner].name.toUpperCase()} WINS!`,195,H*.59,30,'#ffe192',900,'center',340);
+    txt(s.resultKind==='flower'?'TWO FLOWER CHALLENGES WON':'LAST PLAYER STANDING',195,H*.65,15,'#c9f5e8',900);
+    button(host?'REMATCH':'WAITING FOR HOST',30,H-139,330,61,()=>host&&sendAction({type:'rematch'}),host?'gold':'dark');
+    button('×',346,20,34,34,leaveTable,'dark');
+    return;
+  }
   if (!net.connected) { panel(20, 115, 350, 58, '#69415a', '#f6a3aa'); txt('Reconnecting to your table…', 195, 144, 15, '#fff', 800); }
-  const top = 132, gap = Math.min(99, (H - 410) / Math.ceil(s.seats.length / 2));
+  const top = 160, gap = H < 760 ? 76 : 99, seatHeight = H < 760 ? 70 : 82;
+  const slide=ui.reducedMotion||H<760?0:Math.max(0,1-ui.phaseAge/.35)*8;
+  const stageY = top + Math.floor((s.seats.length - 1) / 2) * gap + seatHeight + 19 + slide;
   s.seats.forEach((p, i) => {
     const x = 20 + i % 2 * 183, y = top + Math.floor(i / 2) * gap;
-    panel(x, y, 168, 82, i === s.turn ? '#463463' : '#302747', i === s.turn ? '#ffd981' : '#685783', 16, 'player-mat');
+    panel(x, y, 168, seatHeight, i === s.turn ? '#463463' : '#302747', i === s.turn ? '#ffd981' : '#685783', 16, 'player-mat');
+    ui.turnGlow(x,y,168,seatHeight,colors[i],i===s.turn&&['place','add','bid','reveal'].includes(s.stage));
+    ui.tint(x+5,y+13,5,seatHeight-28,colors[i]);
     txt(p.name, x + 12, y + 23, 14, p.connected ? '#fff4d8' : '#9c92aa', 800, 'left', 104);
-    txt('✿'.repeat(p.wins) || '○ ○', x + 151, y + 22, 15, '#ffdc81', 800, 'right');
-    txt(`${p.stack} placed · ${p.discs} discs`, x + 12, y + 55, 12, '#bdb3d2', 600, 'left', 112);
-    if (p.stack) disc(x + 143, y + 56, 16, 'back', colors[i]);
+    if(p.wins){const pop=!ui.reducedMotion&&i===ui.pointSeat?Math.max(0,1-ui.pointAge/.7)*.28:0;art('point-badge',x+126-19*pop,y+3-19*pop,38*(1+pop),38*(1+pop));}
+    else txt('◇ ◇', x + 151, y + 22, 15, '#ffdc81', 800, 'right');
+    txt(`${p.stack} placed · ${p.discs} discs`, x + 12, y + seatHeight - 27, 12, '#bdb3d2', 600, 'left', 112);
+    if (p.stack){const pop=!ui.reducedMotion&&i===ui.stackSeat?Math.max(0,1-ui.stackAge/.45)*.38:0;disc(x+143,y+seatHeight-26,16*(1+pop),'back',colors[i]);}
   });
   if (s.stage === 'lobby') {
     panel(28, H - 248, 334, 91, '#4b335c', '#f3bc81', 20, 'menu-box');
@@ -157,33 +180,43 @@ export function drawTable(ui) {
     txt('Everyone still here can vote to continue.', 195, H - 220, 13, '#e4dbea', 700);
     button(s.votes?.[me] ? 'VOTE RECORDED' : 'CONTINUE TOGETHER', 30, H - 165, 330, 64, () => sendAction({ type: 'continue' }), s.votes?.[me] ? 'dark' : 'gold');
   } else if ((s.stage === 'place' || s.stage === 'add') && net.localStage !== 'bid-picker') {
-    txt(turn ? s.stage === 'place' ? 'PLACE ONE SECRET DISC' : 'ADD A DISC OR START A BID' : `Waiting for ${s.seats[s.turn]?.name}`, 195, H - 272, 15, '#ffdc83', 900);
+    const compact=H<760,cardRadius=compact?33:43,cardY=stageY+(compact?78:92);
+    panel(27, stageY, 336, compact?150:181, '#342a53', '#8271a0', 20, 'menu-box');
+    txt(turn ? s.stage === 'place' ? 'YOUR FIRST DISC' : 'PLAY A DISC OR BID' : `WAITING FOR ${s.seats[s.turn]?.name.toUpperCase()}`, 195, stageY + 26, 16, '#ffe18e', 900, 'center', 292);
     if (turn) {
-      const cards = s.hand;
-      cards.forEach((type, j) => {
-        const x = 195 - (cards.length - 1) * 37 + j * 74;
-        disc(x, H - 209, 30, type, type === 'skull' ? '#f092a4' : '#e7b978');
-        ui.spots.push({ x: x - 34, y: H - 245, w: 68, h: 72, fn: () => sendAction({ type: 'place', disc: type }), label: type });
-      });
-      if (!cards.length) txt('No discs left: bid now.', 195, H - 209, 15, '#fff', 700);
-      if (s.stage === 'add') button('START A BID', 30, H - 128, 330, 60, () => { net.draft = 1; net.localStage = 'bid-picker'; net.onChange(); });
+      const flowerCount=s.hand.filter(type=>type==='flower').length,skullCount=s.hand.filter(type=>type==='skull').length;
+      if(flowerCount)cardChoice(124,cardY,cardRadius,'flower',flowerCount,()=>sendAction({type:'place',disc:'flower'}));
+      if(skullCount)cardChoice(264,cardY,cardRadius,'skull',skullCount,()=>sendAction({type:'place',disc:'skull'}));
+      if (!s.hand.length) txt('No cards left in your hand.',195,stageY+82,14,'#fff',700);
+      if (s.stage === 'add') {
+        txt(`BID 1–${s.total}  ·  ${s.total} ON TABLE`,195,H-148,13,'#ffe192',900);
+        button('START A BID', 30, H - 128, 330, 60, () => { net.draft = 1; net.localStage = 'bid-picker'; net.onChange(); });
+      } else txt('Everyone places one card before bidding',195,H-78,13,'#e4d7ed',700);
+    } else {
+      txt('Your hand stays private on this phone.',195,stageY+79,13,'#e4d7ed',700);
+      if(s.stage==='add')txt(`MAX BID ${s.total} · ${s.total} DISCS IN PLAY`,195,stageY+111,13,'#ffe192',900);
     }
   } else if (s.stage === 'bid' || net.localStage === 'bid-picker') {
     if (net.localStage === 'bid-picker' && turn) {
-      txt(`Bid ${s.bid + 1} to ${s.total}`, 195, H - 263, 16, '#ffe192', 900);
+      txt(`BID ${s.bid + 1}–${s.total}  ·  ${s.total} CARDS ON TABLE`, 195, stageY + 22, 15, '#ffe192', 900);
       button('−', 45, H - 216, 65, 68, () => { net.draft = Math.max(s.bid + 1, net.draft - 1); net.onChange(); }, 'dark');
       panel(126, H - 216, 138, 68, '#493360', '#f7bf60'); txt(String(net.draft), 195, H - 182, 34, '#ffe197', 900);
       button('+', 280, H - 216, 65, 68, () => { net.draft = Math.min(s.total, net.draft + 1); net.onChange(); }, 'dark');
       button('BID ' + net.draft, 30, H - 126, 210, 59, () => { sendAction({ type: 'bid', amount: net.draft }); net.localStage = ''; }, 'gold');
       button('BACK', 250, H - 126, 110, 59, () => { net.localStage = ''; net.onChange(); }, 'dark');
     } else {
-      txt(`${s.bid} FLOWERS`, 195, H - 230, 27, '#ffe197', 900);
-      txt(`${s.seats[s.leader]?.name} holds the high bid`, 195, H - 193, 13, '#f3e7ed', 700);
+      panel(38, stageY, 314, 108, '#342a53', '#8271a0', 20, 'menu-box');
+      const bidPop=ui.reducedMotion?0:Math.max(0,1-ui.bidAge/.5)*5;
+      txt(`${s.bid} FLOWERS`, 195, stageY + 32, 27+bidPop, '#ffe197', 900);
+      txt(`${s.seats[s.leader]?.name} holds the high bid`, 195, stageY + 61, 13, '#f3e7ed', 700);
+      txt(`MAX ${s.total}  ·  NO MORE CARDS`,195,stageY+84,12,'#ffdc91',900);
       if (turn) { button('RAISE', 29, H - 136, 160, 60, () => { net.draft = s.bid + 1; net.localStage = 'bid-picker'; net.onChange(); }); button('PASS', 202, H - 136, 160, 60, () => sendAction({ type: 'pass' }), 'dark'); }
     }
   } else if (s.stage === 'reveal') {
-    txt(`${s.seats[s.challenger].name} must flip ${s.remaining} more`, 195, H - 278, 16, '#ffe197', 900);
-    txt(s.flips.length ? s.flips.map(f => f.disc === 'skull' ? '☠' : '✿').join('  ') : 'Own stack first, top disc first.', 195, H - 245, 18, '#fff', 800);
+    panel(32, stageY, 326, 91, '#342a53', '#8271a0', 20, 'menu-box');
+    txt(`${s.seats[s.challenger].name} must flip ${s.remaining} more`, 195, stageY + 31, 16, '#ffe197', 900);
+    if(s.flips.length){const recent=s.flips.slice(-6);recent.forEach((f,j)=>disc(195-(recent.length-1)*25+j*50,stageY+67,j===recent.length-1&&!ui.reducedMotion?21*Math.min(1,.2+ui.phaseAge*4):21,f.disc));}
+    else txt('Own stack first, top disc first.', 195, stageY + 65, 18, '#fff', 800);
     s.seats.forEach((p, i) => {
       const left = p.stack - s.flips.filter(f => f.owner === i).length;
       if (!left) return;
@@ -192,14 +225,20 @@ export function drawTable(ui) {
       button(`${p.name} · ${left}`, 25 + i % 2 * 175, H - 207 + Math.floor(i / 2) * 57, 165, 49, () => { if (turn && legal) sendAction({ type: 'flip', target: i }); }, turn && legal ? 'gold' : 'dark');
     });
   } else if (s.stage === 'loss') {
-    txt('☠', 195, H - 265, 64, '#ff9fa8', 900);
-    txt(`${s.seats[s.skullOwner].name} chooses a hidden disc`, 195, H - 196, 14, '#fff', 700);
-    if (me === s.skullOwner) for (let i = 0; i < s.lossCount; i++) button('✦', 195 - s.lossCount * 37 + i * 74, H - 143, 66, 65, () => sendAction({ type: 'discard', index: i }), 'dark');
+    disc(195,stageY+52,54,'skull');
+    txt(`${s.seats[s.skullOwner].name} chooses a hidden disc`, 195, H - 185, 14, '#fff', 700);
+    if (me === s.skullOwner) for (let i = 0; i < s.lossCount; i++) {const x=195-(s.lossCount-1)*37+i*74;disc(x,H-112,31,'back',colors[s.challenger]);ui.spots.push({x:x-34,y:H-146,w:68,h:69,fn:()=>sendAction({type:'discard',index:i}),label:'discard hidden disc'});}
   } else if (s.stage === 'choose-lead') {
     txt(`${s.seats[s.challenger].name} chooses the next lead`, 195, H - 283, 15, '#ffdc83', 800);
-    s.seats.forEach((p, i) => { if (p.discs) button(p.name, 30, H - 248 + i * 54, 330, 48, () => { if (me === s.challenger) sendAction({ type: 'lead', target: i }); }, 'dark'); });
+    s.seats.forEach((p, i) => { if (p.discs) button(p.name, 25 + i % 2 * 174, H - 248 + Math.floor(i / 2) * 57, 165, 49, () => { if (me === s.challenger) sendAction({ type: 'lead', target: i }); }, 'dark'); });
   } else if (s.stage === 'result') {
-    txt(s.last, 195, H - 268, 17, '#ffe192', 800);
+    if(s.resultKind==='flower'){
+      const badgeSize=H<760?74:106;
+      const pop=ui.reducedMotion?1:Math.min(1,.72+ui.phaseAge*.65);
+      art('point-badge',195-badgeSize*pop/2,stageY-1,badgeSize*pop,badgeSize*pop);
+      txt(`${s.seats[s.challenger].name} HAS 1 POINT`,195,stageY+badgeSize+14,21,'#ffe192',900,'center',340);
+      txt('One more flower challenge wins!',195,stageY+badgeSize+39,14,'#c9f5e8',800);
+    }else txt(s.last, 195, stageY+60, 17, '#ffe192', 800,'center',340);
     button(host ? 'NEXT ROUND' : 'WAITING FOR HOST', 30, H - 139, 330, 61, () => host && sendAction({ type: 'next' }), host ? 'gold' : 'dark');
   } else if (s.stage === 'win') {
     txt(`${s.seats[s.winner].name.toUpperCase()} WINS!`, 195, H - 246, 27, '#ffe192', 900);

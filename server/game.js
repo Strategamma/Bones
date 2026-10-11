@@ -23,7 +23,7 @@ export function makeRoom(mode, name) {
   if (!['lan', 'internet'].includes(mode)) throw Error('Choose a table type.');
   const player = cleanName(name);
   if (!player) throw Error('Enter a player name.');
-  const room = { code: id(6), mode, stage: 'lobby', seats: [], host: 0, turn: 0, starter: 0, round: 1, placed: 0, bid: 0, leader: -1, passed: [], challenger: -1, remaining: 0, flips: [], skullOwner: -1, last: '', winner: -1, pausedStage: null, votes: [] };
+  const room = { code: id(6), mode, stage: 'lobby', seats: [], host: 0, turn: 0, starter: 0, round: 1, placed: 0, bid: 0, leader: -1, passed: [], challenger: -1, remaining: 0, flips: [], skullOwner: -1, last: '', winner: -1, resultKind: '', pausedStage: null, votes: [] };
   const seat = joinRoom(room, player);
   return { room, seat };
 }
@@ -62,10 +62,11 @@ function finishRound(room) {
   room.round++;
   room.placed = 0;
   room.bid = 0;
+  room.resultKind = '';
   room.leader = -1;
   room.passed = [];
   room.flips = [];
-  room.turn = room.seats[room.starter].connected ? room.starter : next(room, room.starter);
+  room.turn = alive(room).includes(room.starter) && room.seats[room.starter].connected ? room.starter : next(room, room.starter);
   room.stage = 'place';
 }
 export function act(room, seat, action) {
@@ -86,7 +87,7 @@ export function act(room, seat, action) {
       if (!room.seats[room.turn]?.connected) room.turn = next(room, room.turn, i => room.seats[i].connected);
       room.stage = room.pausedStage;
       room.pausedStage = null;
-      if (room.stage === 'place' && room.seats.every((s, i) => !alive(room).includes(i) || !s.connected || s.stack.length)) { room.stage = 'add'; room.turn = room.starter; if (!room.seats[room.turn].connected) room.turn = next(room, room.turn); }
+      if (room.stage === 'place' && room.seats.every((s, i) => !alive(room).includes(i) || !s.connected || s.stack.length)) { room.stage = 'add'; room.turn = next(room, room.starter); }
       room.last = `${room.seats[room.host].name} now hosts the table.`;
     }
     return;
@@ -100,6 +101,7 @@ export function act(room, seat, action) {
     room.round = 1;
     room.placed = 0;
     room.bid = 0;
+    room.resultKind = '';
     room.passed = [];
     room.winner = -1;
     room.stage = 'place';
@@ -132,7 +134,7 @@ export function act(room, seat, action) {
     room.starter = room.challenger;
     if (!cards.length) {
       room.last += ` ${loser.name} is out.`;
-      if (alive(room).length === 1) { room.winner = alive(room)[0]; room.stage = 'win'; return; }
+      if (alive(room).length === 1) { room.winner = alive(room)[0]; room.resultKind = 'elimination'; room.stage = 'win'; return; }
       if (room.skullOwner === room.challenger) { room.stage = 'choose-lead'; return; }
       room.starter = room.skullOwner;
     }
@@ -147,7 +149,7 @@ export function act(room, seat, action) {
       me.stack.push(me.hand.splice(index, 1)[0]);
       if (room.stage === 'place') {
         room.placed++;
-        if (room.seats.every((s, i) => !alive(room).includes(i) || !s.connected || s.stack.length)) { room.stage = 'add'; room.turn = room.starter; if (!room.seats[room.turn].connected) room.turn = next(room, room.turn); }
+        if (room.seats.every((s, i) => !alive(room).includes(i) || !s.connected || s.stack.length)) { room.stage = 'add'; room.turn = next(room, room.starter); }
         else room.turn = next(room, seat);
       } else room.turn = next(room, seat);
       return;
@@ -183,10 +185,12 @@ export function act(room, seat, action) {
     if (disc === 'skull') {
       room.skullOwner = action.target;
       room.last = `${target.name}'s skull! ${me.name} loses a disc.`;
+      room.resultKind = 'skull';
       room.stage = 'loss';
     } else if (room.remaining === 0) {
       me.wins++;
       room.last = `${me.name} found every flower!`;
+      room.resultKind = 'flower';
       if (me.wins === 2) { room.winner = seat; room.stage = 'win'; }
       else { room.starter = seat; room.stage = 'result'; }
     }
@@ -200,7 +204,7 @@ export function view(room, seat) {
     code: room.code, mode: room.mode, stage: room.stage, pausedStage: room.pausedStage,
     host: room.host, turn: room.turn, starter: room.starter, round: room.round,
     bid: room.bid, leader: room.leader, passed: room.passed, challenger: room.challenger,
-    remaining: room.remaining, flips: room.flips, skullOwner: room.skullOwner,
+    remaining: room.remaining, flips: room.flips, skullOwner: room.skullOwner, resultKind: room.resultKind,
     lossCount: room.stage === 'loss' ? room.seats[room.challenger].hand.length + room.seats[room.challenger].stack.length : 0,
     last: room.last, winner: room.winner, votes: room.votes, seat,
     hand: mine.hand, stack: mine.stack,

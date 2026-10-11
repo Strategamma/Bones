@@ -1,5 +1,5 @@
-Goal: distinct joinable LAN and internet Skull tables with correct private multiplayer play.
-Scope: server-authoritative rooms, 3–6 players, reconnect, host migration, Render/LAN launch paths, existing pass-and-play preserved.
-Approach: extract pure round logic into a server room module; WebSocket transport with room codes and per-seat tokens; canvas lobby and game views using existing art; one Node web service serves production build.
-Risks: hidden-disc leakage, disconnected active player, host departure, Render instance restart, HTTPS-to-LAN mixed content.
-Verification: deterministic Node room tests for full phases/privacy/reconnect/host vote; build; live browser checks when permitted.
+Goal: make the existing LAN/internet Skull game feel premium and lively, especially the background.
+Scope: canvas atmosphere, phase and interaction motion, current-turn and placement feedback, reduced-motion behavior. Preserve server rules and controls.
+Approach: draw a layered art-deco table backdrop with restrained glows and motes; add short, state-driven pulses for turns, cards, bids, rewards, and victory.
+Risks: phone rendering cost and effects reducing text contrast or obscuring touch targets.
+Verification: tests/build/diff, asset packaging, static visual review; browser play loop if permitted.

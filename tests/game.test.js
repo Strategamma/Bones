@@ -11,6 +11,7 @@ function table() {
 }
 function flowers(room) { for (let i = 0; i < 3; i++) act(room, i, { type: 'place', disc: 'flower' }); }
 function oneBid(room) {
+  while (room.turn !== 0) act(room, room.turn, { type: 'place', disc: 'flower' });
   act(room, room.turn, { type: 'bid', amount: 1 });
   act(room, room.turn, { type: 'pass' });
   act(room, room.turn, { type: 'pass' });
@@ -23,6 +24,7 @@ test('two successful challenges win; own stack flips first', () => {
   act(room, 0, { type: 'flip', target: 0 });
   assert.equal(room.seats[0].wins, 1);
   assert.equal(room.stage, 'result');
+  assert.equal(view(room, 0).resultKind, 'flower');
   act(room, 0, { type: 'next' });
   flowers(room); oneBid(room);
   act(room, 0, { type: 'flip', target: 0 });
@@ -34,13 +36,17 @@ test('opponent skull costs a hidden disc and does not leak hands', () => {
   act(room, 0, { type: 'place', disc: 'flower' });
   act(room, 1, { type: 'place', disc: 'skull' });
   act(room, 2, { type: 'place', disc: 'flower' });
-  act(room, 0, { type: 'bid', amount: 2 });
+  act(room, 1, { type: 'place', disc: 'flower' });
+  act(room, 2, { type: 'place', disc: 'flower' });
+  act(room, 0, { type: 'bid', amount: 3 });
   act(room, 1, { type: 'pass' });
   act(room, 2, { type: 'pass' });
   act(room, 0, { type: 'flip', target: 0 });
   act(room, 0, { type: 'flip', target: 1 });
+  act(room, 0, { type: 'flip', target: 1 });
   assert.equal(room.stage, 'loss');
-  assert.equal(view(room, 0).seats[1].stack, 1);
+  assert.equal(view(room, 0).resultKind, 'skull');
+  assert.equal(view(room, 0).seats[1].stack, 2);
   assert.equal(view(room, 0).hand.includes('skull'), true);
   assert.equal(JSON.stringify(view(room, 0)).includes(room.seats[1].token), false);
   assert.throws(() => act(room, 0, { type: 'discard', index: 0 }), /skull owner/);
@@ -68,7 +74,8 @@ test('out-of-turn placement and zero bids are rejected', () => {
   const room = table();
   assert.throws(() => act(room, 1, { type: 'place', disc: 'flower' }), /Wait/);
   flowers(room);
-  assert.throws(() => act(room, 0, { type: 'bid', amount: 0 }), /Bid above/);
+  assert.equal(room.turn, 1);
+  assert.throws(() => act(room, 1, { type: 'bid', amount: 0 }), /Bid above/);
 });
 test('maximum bid goes directly to reveal and skull loss can eliminate', () => {
   const room = table();
@@ -76,7 +83,9 @@ test('maximum bid goes directly to reveal and skull loss can eliminate', () => {
   act(room, 0, { type: 'place', disc: 'skull' });
   act(room, 1, { type: 'place', disc: 'flower' });
   act(room, 2, { type: 'place', disc: 'flower' });
-  act(room, 0, { type: 'bid', amount: 3 });
+  act(room, 1, { type: 'place', disc: 'flower' });
+  act(room, 2, { type: 'place', disc: 'flower' });
+  act(room, 0, { type: 'bid', amount: 5 });
   assert.equal(room.stage, 'reveal');
   act(room, 0, { type: 'flip', target: 0 });
   assert.equal(room.stage, 'loss');
@@ -85,6 +94,21 @@ test('maximum bid goes directly to reveal and skull loss can eliminate', () => {
   act(room, 0, { type: 'lead', target: 2 });
   assert.equal(room.starter, 2);
   assert.equal(room.stage, 'result');
+});
+test('first add turn moves to the next player; bid cap grows with placed discs and locks placement', () => {
+  const room = table();
+  flowers(room);
+  assert.equal(room.stage, 'add');
+  assert.equal(room.turn, 1);
+  assert.equal(view(room, 1).total, 3);
+  assert.throws(() => act(room, 1, { type: 'bid', amount: 4 }), /up to the discs/);
+  act(room, 1, { type: 'place', disc: 'flower' });
+  assert.equal(room.turn, 2);
+  assert.equal(view(room, 2).total, 4);
+  act(room, 2, { type: 'bid', amount: 2 });
+  assert.equal(room.stage, 'bid');
+  assert.throws(() => act(room, 0, { type: 'place', disc: 'flower' }), /Raise or pass/);
+  assert.throws(() => act(room, 0, { type: 'bid', amount: 5 }), /up to the discs/);
 });
 test('host changes in lobby and after victory without taking control back', () => {
   const room = table();
