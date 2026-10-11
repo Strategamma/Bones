@@ -140,14 +140,14 @@ export function drawTable(ui) {
   const top = 132, gap = Math.min(99, (H - 410) / Math.ceil(s.seats.length / 2));
   s.seats.forEach((p, i) => {
     const x = 20 + i % 2 * 183, y = top + Math.floor(i / 2) * gap;
-    panel(x, y, 168, 82, i === s.turn ? '#463463' : '#302747', i === s.turn ? '#ffd981' : '#685783', 16);
-    txt(p.name, x + 12, y + 23, 14, p.connected ? '#fff4d8' : '#9c92aa', 800, 'left');
+    panel(x, y, 168, 82, i === s.turn ? '#463463' : '#302747', i === s.turn ? '#ffd981' : '#685783', 16, 'player-mat');
+    txt(p.name, x + 12, y + 23, 14, p.connected ? '#fff4d8' : '#9c92aa', 800, 'left', 104);
     txt('✿'.repeat(p.wins) || '○ ○', x + 151, y + 22, 15, '#ffdc81', 800, 'right');
-    txt(`${p.stack} placed · ${p.discs} discs`, x + 12, y + 55, 12, '#bdb3d2', 600, 'left');
+    txt(`${p.stack} placed · ${p.discs} discs`, x + 12, y + 55, 12, '#bdb3d2', 600, 'left', 112);
     if (p.stack) disc(x + 143, y + 56, 16, 'back', colors[i]);
   });
   if (s.stage === 'lobby') {
-    panel(28, H - 248, 334, 91, '#4b335c', '#f3bc81');
+    panel(28, H - 248, 334, 91, '#4b335c', '#f3bc81', 20, 'menu-box');
     txt(`CODE  ${s.code}`, 195, H - 207, 25, '#ffe192', 900);
     txt(`${s.seats.length}/6 players · ${s.mode === 'lan' ? 'same Wi‑Fi' : 'online'}`, 195, H - 170, 13, '#e4dbea', 700);
     button(host ? 'START GAME' : 'WAITING FOR HOST', 30, H - 139, 330, 58, () => host && sendAction({ type: 'start' }), host ? 'gold' : 'dark');
