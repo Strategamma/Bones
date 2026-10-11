@@ -1,0 +1,3 @@
+Original prompt: Create the board game of Skull from the linked rules. Read handoff. Optimize for phone, cute 3D logo, modern 4k arcade feel, happy intuitive UI, and serious phase design.
+TODO: implement and verify local pass-and-play full match; PWA shell; phone layouts.
+Implemented local 3–6 player pass-and-play with preparation, adding, bidding, reveal, secret loss, scoring, elimination, rematch, name hint, and offline PWA shell. Production build and syntax check pass. Browser QA remains unverified: Playwright's macOS browser launch is denied by the sandbox and the app browser explicitly denied access to the local page. TODO: visual phone checks at 320px and 390px; complete full-match interaction test on a permitted browser; verify installed offline launch.

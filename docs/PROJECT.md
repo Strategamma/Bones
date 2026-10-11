@@ -1,0 +1,1 @@
+Skull is a mobile-first, single-device pass-and-play web game using a canvas UI and vanilla JavaScript. It follows the classic 3 flowers + 1 skull rules for 3–6 players. Each private turn uses a handoff screen. The game is an offline-capable PWA; it does not claim network multiplayer. Arcade URL names are treated only as editable display-name hints.
