@@ -2,6 +2,10 @@
 
 A phone-first Skull game with separate **LAN (same Wi-Fi)** and **Internet** tables. Every player uses their own phone. The table server keeps hands private and validates moves.
 
+The transparent, matte 3D **BONES** wordmark at [`public/assets/bones-platform-logo.png`](public/assets/bones-platform-logo.png) is the shared arcade listing and in-game entry logo. Skull and flower symbols remain card faces within the game.
+
+Tap **?** on the menu or at a table for the illustrated rulebook. The **♪** control mutes or restores the short bone-like action sounds; the choice is saved in that browser.
+
 ## Internet tables on Render
 
 The repository includes a one-service [`render.yaml`](render.yaml) Blueprint. In Render, choose **New → Blueprint**, connect this GitHub repository, and deploy it. The service runs in `internet` mode.
