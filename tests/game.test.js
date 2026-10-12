@@ -123,3 +123,12 @@ test('host changes in lobby and after victory without taking control back', () =
   connection(room, 1, true);
   assert.equal(room.host, 0);
 });
+test('only the host can transfer control to a connected player', () => {
+  const room = table();
+  assert.throws(() => act(room, 1, { type: 'transfer-host', target: 2 }), /Only the host/);
+  act(room, 0, { type: 'transfer-host', target: 1 });
+  assert.equal(room.host, 1);
+  assert.throws(() => act(room, 0, { type: 'transfer-host', target: 2 }), /Only the host/);
+  connection(room, 2, false);
+  assert.throws(() => act(room, 1, { type: 'transfer-host', target: 2 }), /connected player/);
+});

@@ -73,13 +73,20 @@ export function act(room, seat, action) {
   if (!action || typeof action !== 'object') throw Error('Invalid action.');
   const me = room.seats[seat];
   if (!me?.connected) throw Error('Reconnect before playing.');
+  if (action.type === 'transfer-host') {
+    if (seat !== room.host) throw Error('Only the host can transfer hosting.');
+    if (!Number.isInteger(action.target) || action.target === seat || !room.seats[action.target]?.connected) throw Error('Choose a connected player.');
+    room.host = action.target;
+    room.last = `${room.seats[action.target].name} now hosts the table.`;
+    return;
+  }
   if (room.stage === 'paused') {
     if (action.type !== 'continue') throw Error('The table is paused.');
     if (!alive(room).includes(seat)) throw Error('You are out.');
     room.votes[seat] = true;
     const connected = alive(room).filter(i => room.seats[i].connected);
     if (connected.length >= 2 && connected.every(i => room.votes[i])) {
-      room.host = connected[0];
+      if (!room.seats[room.host]?.connected) room.host = connected[0];
       if ((room.pausedStage === 'reveal' || room.pausedStage === 'choose-lead') && !room.seats[room.challenger].connected || room.pausedStage === 'bid' && !room.seats[room.leader].connected || room.pausedStage === 'loss' && !room.seats[room.skullOwner].connected) {
         room.last = 'Host transferred. Waiting for the needed player to reconnect.';
         return;

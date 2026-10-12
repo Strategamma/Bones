@@ -10,6 +10,18 @@ const colorNames=['coral','mint','amber','violet','blue','orchid'];
 const hash=new URLSearchParams(location.hash.slice(1)),hint=hash.get('arcadeName');if(hash.has('arcadeName')){hash.delete('arcadeName');history.replaceState(history.state,'',location.pathname+location.search+(hash.size?'#'+hash:''))}
 let savedName='';try{savedName=localStorage.getItem('skull-name')||''}catch{}
 const names=[playerName(savedName,hint)];
+let installPrompt=null;
+let installed=matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+addEventListener('beforeinstallprompt',event=>{event.preventDefault();installPrompt=event;draw()});
+addEventListener('appinstalled',()=>{installed=true;installPrompt=null;draw()});
+async function installApp(){
+  if(installPrompt){const prompt=installPrompt;installPrompt=null;await prompt.prompt();draw();return}
+  const dialog=document.createElement('dialog');dialog.id='install-help';
+  const title=document.createElement('h2');title.textContent='INSTALL BONES';dialog.append(title);
+  const message=document.createElement('p');message.textContent=/iPad|iPhone|iPod/.test(navigator.userAgent)?'In Safari, tap Share, then Add to Home Screen.':'Open your browser menu and choose Install app or Add to Home Screen.';dialog.append(message);
+  const close=document.createElement('button');close.textContent='GOT IT';close.onclick=()=>dialog.close();dialog.append(close);
+  dialog.addEventListener('close',()=>dialog.remove());document.body.append(dialog);dialog.showModal();
+}
 const S={phase:'menu',clock:0,hoverX:-100,hoverY:-100,hoverLabel:'',pressX:0,pressY:0,pressAt:-10,phaseKey:'',phaseAt:0,stackCounts:[],stackSeat:-1,stackAt:-10,bidValue:0,bidAt:-10,pointCounts:[],pointSeat:-1,pointAt:-10,soundStage:'',flipCount:0};
 let W=390,H=844,scale=1,spots=[];
 const assetNames=['menu-box','text-box','player-mat','button-gold','button-pink','button-ink','card-back','card-flower','card-skull','point-badge','winner-crown',...colorNames.map(name=>`card-back-${name}`)];
@@ -41,7 +53,7 @@ function bg(){
 }
 function drawWordmark(cx,cy,w){if(!wordmark.naturalWidth)return false;const sy=wordmark.naturalHeight*.28,sh=wordmark.naturalHeight*.45,h=w*sh/wordmark.naturalWidth;c.drawImage(wordmark,0,sy,wordmark.naturalWidth,sh,cx-w/2,cy-h/2,w,h);return true}
 function logo(y=138){c.save();c.translate(0,reducedMotion.matches?0:Math.sin(S.clock*1.7)*2);if(!drawWordmark(195,y,330))txt('BONES',195,y,60,'#f7f2e9',1000);txt('THE BLUFFING GAME',195,y+94,13,'#a9e5dd',900);c.restore()}
-function header(title,sub){panel(15,8,360,106,'#30284f','#6b5c93',20,'text-box');if(!drawWordmark(195,29,106))txt('BONES',195,29,18,'#f7f2e9',900);txt(title,195,67,27,'#f7f2e9',900,'center',326);txt(sub,195,137,14,'#e2d8ef',700,'center',340)}
+function header(title,sub){panel(15,8,360,127,'#30284f','#6b5c93',20,'text-box');if(!drawWordmark(195,29,100))txt('BONES',195,29,18,'#f7f2e9',900);txt(title,195,74,title.length>16?22:26,'#f7f2e9',900,'center',318);txt(sub,195,108,13,'#e2d8ef',700,'center',326)}
 function cardChoice(x,y,r,type,count,fn){const hover=Math.hypot(S.hoverX-x,S.hoverY-y)<r+10;const pressed=Math.hypot(S.pressX-x,S.pressY-y)<r+10&&S.clock-S.pressAt<.16;const age=S.clock-S.phaseAt;const arrive=reducedMotion.matches?1:Math.min(1,.85+Math.max(0,age)*.45);const size=r*arrive*(reducedMotion.matches?1:pressed ? .91 : hover ? 1.09 : 1);disc(x,y,size,type);txt(type==='flower'?'FLOWER':'SKULL',x,y+r+13,13,type==='flower'?'#f7f2e9':'#ffb6cb',900);txt(`×${count}`,x+r-2,y-r+8,13,'#fff',900);spots.push({x:x-r-10,y:y-r-10,w:(r+10)*2,h:(r+10)*2,fn,label:type})}
 function turnGlow(x,y,w,h,color,active){if(!active)return;c.save();c.globalAlpha=reducedMotion.matches ? .42 : .38+Math.sin(S.clock*3)*.16;c.strokeStyle=color;c.lineWidth=2.5;c.shadowColor=color;c.shadowBlur=10;c.beginPath();c.roundRect(x+2,y+2,w-4,h-7,17);c.stroke();c.restore()}
 function updateMotion(){const state=net.state;if(!state?.seats){S.stackCounts=[];S.pointCounts=[];S.bidValue=0;S.soundStage='';S.flipCount=0;return}const stacks=state.seats.map(p=>p.stack),points=state.seats.map(p=>p.wins);if(S.stackCounts.length===stacks.length)stacks.forEach((n,i)=>{if(n>S.stackCounts[i]){S.stackSeat=i;S.stackAt=S.clock}});if(S.pointCounts.length===points.length)points.forEach((n,i)=>{if(n>S.pointCounts[i]){S.pointSeat=i;S.pointAt=S.clock}});if(state.bid>S.bidValue)S.bidAt=S.clock;if(S.soundStage){const cue=state.stage==='win'&&S.soundStage!=='win'?'win':state.stage==='loss'&&S.soundStage!=='loss'?'skull':state.stage==='result'&&S.soundStage!=='result'&&state.resultKind==='flower'?'point':state.flips.length>S.flipCount?'flip':state.bid>S.bidValue?'bid':stacks.some((n,i)=>n>(S.stackCounts[i]||0))?'card':'';if(cue)playSfx(cue)}S.stackCounts=stacks;S.pointCounts=points;S.bidValue=state.bid;S.soundStage=state.stage;S.flipCount=state.flips.length}
@@ -62,7 +74,8 @@ function draw(){
   txt('Together on the same Wi-Fi',195,H*.52+83,13,'#e4d7ed',700);
   button('INTERNET TABLE',33,H*.52+126,324,66,()=>openTable('internet',names[0]),'pink');
   txt('Play with friends anywhere',195,H*.52+209,13,'#e4d7ed',700);
-  txt('3–6 players  ·  one private hand per phone',195,H-42,12,'#bdb1d2',700);
+  if(!installed)button('↓ INSTALL APP',100,H-(H<720?75:107),190,H<720?36:45,installApp,'dark');
+  if(H>=720)txt('3–6 players  ·  one private hand per phone',195,H-42,12,'#bdb1d2',700);
   button(soundEnabled()?'♪ ON':'♪ OFF',16,26,82,42,()=>{toggleSound();draw()},'dark');
   button('?',332,26,42,42,showRulebook,'dark');
 }

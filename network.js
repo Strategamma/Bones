@@ -8,7 +8,30 @@ shell.id = 'table-setup';
 shell.hidden = true;
 shell.innerHTML = `<form id="table-form"><img class="table-brand" src="${import.meta.env.BASE_URL}assets/bones-platform-logo.png" alt="BONES"><div class="table-kicker">✦ DECADENCE ARCADE ✦</div><h2 id="table-title">Join a table</h2><p id="table-detail"></p><button type="button" id="table-rules">SEE THE RULES</button><button type="button" id="table-change-server" hidden>CHANGE SERVER ADDRESS</button><label>Your name<input id="table-name" maxlength="32" autocomplete="nickname" required></label><label id="address-label"><span id="address-title">Server address</span><input id="table-address" type="text" inputmode="url" required></label><label>Have a table code?<input id="table-code" maxlength="6" autocomplete="off" autocapitalize="characters" placeholder="Enter code to join · or leave blank"></label><p id="table-error" role="alert"></p><button type="submit" id="table-submit">CREATE TABLE</button><button type="button" id="table-resume" hidden>RESUME PREVIOUS TABLE</button><button type="button" id="table-back">BACK TO TABLES</button></form>`;
 document.body.append(shell);
+const hostDialog = document.createElement('dialog');
+hostDialog.id = 'host-dialog';
+document.body.append(hostDialog);
 const $ = s => shell.querySelector(s);
+function showHostControls() {
+  const state = net.state;
+  if (!state || state.host !== state.seat) return;
+  hostDialog.replaceChildren();
+  const title = document.createElement('h2'); title.textContent = 'HOST CONTROLS'; hostDialog.append(title);
+  for (const [seat, player] of state.seats.entries()) {
+    if (seat === state.seat) continue;
+    const row = document.createElement('div'); row.className = 'host-player';
+    const name = document.createElement('strong'); name.textContent = `${player.name}${player.connected ? '' : ' · offline'}`; row.append(name);
+    const transfer = document.createElement('button'); transfer.textContent = 'MAKE HOST'; transfer.disabled = !player.connected;
+    transfer.onclick = () => { sendAction({ type: 'transfer-host', target: seat }); hostDialog.close(); }; row.append(transfer);
+    if (state.stage === 'lobby') {
+      const remove = document.createElement('button'); remove.textContent = 'REMOVE';
+      remove.onclick = () => { remove.textContent = 'CONFIRM REMOVE'; remove.onclick = () => { sendAction({ type: 'kick', target: seat }); hostDialog.close(); }; }; row.append(remove);
+    }
+    hostDialog.append(row);
+  }
+  const close = document.createElement('button'); close.textContent = 'DONE'; close.onclick = () => hostDialog.close(); hostDialog.append(close);
+  hostDialog.showModal();
+}
 function normalizeUrl(raw, mode) {
   const value = raw.trim();
   const url = new URL(/^https?:\/\//i.test(value) ? value : `${mode === 'lan' ? 'http' : 'https'}://${value}`);
@@ -97,6 +120,12 @@ function connect(first) {
       save('skull-auto-resume', 'yes');
       shell.hidden = true;
     } else if (message.type === 'state') { net.state = message.state; net.draft = Math.max(1, message.state.bid + 1); }
+    else if (message.type === 'kicked') {
+      const mode = net.mode;
+      leaveTable(); openTable(mode, stored('skull-name'));
+      $('#table-error').textContent = 'The host removed you from this table.';
+      return;
+    }
     else if (message.type === 'error') {
       net.error = message.message;
       if (!net.state) { const address = net.url; openTable(net.mode, stored('skull-name'), net.code); $('#table-address').value = address; }
@@ -104,11 +133,17 @@ function connect(first) {
     }
     net.onChange();
   };
-  socket.onclose = () => {
+  socket.onclose = event => {
     clearInterval(heartbeat);
     if (net.socket !== socket) return;
     net.connected = false;
     if (net.manualClose) return;
+    if (event.code === 4003) {
+      const mode = net.mode;
+      leaveTable(); openTable(mode, stored('skull-name'));
+      $('#table-error').textContent = 'The host removed you from this table.';
+      return;
+    }
     net.error = 'Connection lost. Reconnecting…';
     net.onChange();
     if (net.token) setTimeout(() => { if (!net.connected && !net.manualClose) connect(); }, Math.min(12000, 800 * 2 ** Math.min(net.retry++, 4)));
@@ -124,6 +159,7 @@ export function resumeLast() {
 }
 export function sendAction(action) { if (net.connected && net.socket?.readyState === WebSocket.OPEN) net.socket.send(JSON.stringify({ type: 'action', action })); }
 export function leaveTable() {
+  if (hostDialog.open) hostDialog.close();
   net.manualClose = true;
   net.socket?.close(); net.socket = null; net.state = null; net.mode = null; net.token = ''; net.code = ''; net.connected = false; net.error = ''; net.notice = ''; net.localStage = '';
   clear('skull-auto-resume'); shell.hidden = true; net.onChange();
@@ -142,10 +178,10 @@ async function shareInvite() {
 }
 export function drawTable(ui) {
   const { header, panel, txt, button, disc, cardChoice, art, H, colors } = ui;
-  const controls=()=>{button(soundEnabled()?'♪ ON':'♪ OFF',18,20,73,40,()=>{toggleSound();net.onChange()},'dark');button('?',96,20,40,40,showRulebook,'dark')};
+  const controls=()=>{button(soundEnabled()?'♪ ON':'♪ OFF',18,20,73,40,()=>{toggleSound();net.onChange()},'dark');button('?',96,20,40,40,showRulebook,'dark');if(net.state?.host===net.state?.seat&&net.state.seats.length>1)button('⚙',291,20,40,40,showHostControls,'dark')};
   const s = net.state;
   if (!s) {
-    header(net.mode === 'lan' ? 'LAN TABLE' : 'INTERNET TABLE', net.connected ? 'Connecting to the table…' : 'Enter your server address and name.');
+    header(net.mode === 'lan' ? 'LAN TABLE' : 'INTERNET TABLE', net.connected ? 'Connecting to the table…' : 'Choose a name to create or join.');
     controls();
     txt('✦', 195, H * .40, 90, '#f7f2e9', 900);
     if (net.error) txt(net.error.slice(0, 40), 195, H * .65, 13, '#ffafb8', 700);
@@ -154,7 +190,7 @@ export function drawTable(ui) {
   }
   const me = s.seat, mine = s.seats[me], turn = s.turn === me, host = s.host === me;
   const titles={lobby:`${s.mode.toUpperCase()} TABLE`,place:'PLACE A DISC',add:'ADD OR BID',bid:'THE BIDDING',reveal:'THE REVEAL',loss:'SKULL REVEALED','choose-lead':'CHOOSE THE LEAD',result:'ROUND COMPLETE',win:'GAME OVER',paused:'TABLE PAUSED'};
-  header(titles[s.stage]||'BONES TABLE',s.stage==='lobby'?`Code ${s.code} · invite your friends`:`Round ${s.round} · ${s.last||`${s.seats[s.turn]?.name||'Player'} to act`}`);
+  header(titles[s.stage]||'BONES TABLE',s.stage==='lobby'?'Invite friends · 3–6 players':`Round ${s.round} · ${s.last||`${s.seats[s.turn]?.name||'Player'} to act`}`);
   controls();
   if(s.stage==='win'){
     const lift=ui.reducedMotion?0:Math.sin(ui.clock*2.5)*5;
@@ -167,11 +203,11 @@ export function drawTable(ui) {
     return;
   }
   if (!net.connected) { panel(20, 115, 350, 58, '#69415a', '#f6a3aa'); txt('Reconnecting to your table…', 195, 144, 15, '#fff', 800); }
-  const top = 160, gap = H < 760 ? 76 : 99, seatHeight = H < 760 ? 70 : 82;
+  const top = s.stage === 'lobby' && H < 700 ? 145 : 160, gap = s.stage === 'lobby' ? (H < 700 ? 68 : H < 760 ? 74 : 84) : H < 760 ? 76 : 99, seatHeight = s.stage === 'lobby' ? (H < 700 ? 62 : 70) : H < 760 ? 70 : 82;
   const slide=ui.reducedMotion||H<760?0:Math.max(0,1-ui.phaseAge/.35)*8;
   const stageY = top + Math.floor((s.seats.length - 1) / 2) * gap + seatHeight + 19 + slide;
   s.seats.forEach((p, i) => {
-    const x = 20 + i % 2 * 183, y = top + Math.floor(i / 2) * gap;
+    const x = s.stage === 'lobby' && s.seats.length === 1 ? 111 : 20 + i % 2 * 183, y = top + Math.floor(i / 2) * gap;
     panel(x, y, 168, seatHeight, i === s.turn ? '#463463' : '#302747', i === s.turn ? '#ffd981' : '#685783', 16, 'player-mat');
     ui.turnGlow(x,y,168,seatHeight,colors[i],i===s.turn&&['place','add','bid','reveal'].includes(s.stage));
     ui.tint(x+5,y+13,5,seatHeight-28,colors[i]);
@@ -182,11 +218,17 @@ export function drawTable(ui) {
     if (p.stack){const pop=!ui.reducedMotion&&i===ui.stackSeat?Math.max(0,1-ui.stackAge/.45)*.38:0;disc(x+143,y+seatHeight-26,16*(1+pop),'back',colors[i]);}
   });
   if (s.stage === 'lobby') {
-    panel(28, H - 248, 334, 91, '#4b335c', '#f3bc81', 20, 'menu-box');
-    txt(`CODE  ${s.code}`, 195, H - 207, 25, '#f7f2e9', 900);
-    txt(`${s.seats.length}/6 players · ${s.mode === 'lan' ? 'same Wi‑Fi' : 'online'}`, 195, H - 170, 13, '#e4dbea', 700);
-    button(host ? 'START GAME' : 'WAITING FOR HOST', 30, H - 139, 330, 58, () => host && sendAction({ type: 'start' }), host ? 'gold' : 'dark');
-    button('SHARE INVITE', 83, H - 74, 224, 45, shareInvite, 'dark');
+    const connected = s.seats.filter(p => p.connected).length;
+    const ready = connected >= 3 && connected === s.seats.length;
+    const lobbyY = Math.max(top + Math.ceil(s.seats.length / 2 - 1) * gap + seatHeight + (H < 700 ? 18 : 30), H * .44);
+    if (s.seats.length === 1) txt('Your table is ready for friends', 195, lobbyY - 21, 15, '#91d9c7', 800);
+    panel(28, lobbyY, 334, 86, '#4b335c', '#f3bc81', 20, 'menu-box');
+    txt(`CODE  ${s.code}`, 195, lobbyY + 29, 25, '#f7f2e9', 900);
+    txt(ready ? `${connected} players ready · ${s.mode === 'lan' ? 'same Wi‑Fi' : 'online'}` : `Need ${Math.max(0,3-connected)} more connected player${3-connected===1?'':'s'}`, 195, lobbyY + 63, 13, ready ? '#91d9c7' : '#e4dbea', 800);
+    button('SHARE INVITE', 30, lobbyY + 101, 330, 52, shareInvite, 'pink');
+    if (host && ready) button('START GAME', 30, lobbyY + 167, 330, 56, () => sendAction({ type: 'start' }), 'gold');
+    else { panel(30, lobbyY + 167, 330, 56, '#3a304e', '#6d6081', 16); txt(host ? 'WAITING FOR PLAYERS' : 'WAITING FOR HOST', 195, lobbyY + 195, 16, '#d1c8d9', 800); }
+    if (net.error || net.notice) txt((net.error || net.notice).slice(0, 45), 195, lobbyY + 245, 12, net.error ? '#ffadb8' : '#c8f5d9', 700);
   } else if (s.stage === 'paused') {
     txt('TABLE PAUSED', 195, H - 259, 22, '#f7f2e9', 900);
     txt('Everyone still here can vote to continue.', 195, H - 220, 13, '#e4dbea', 700);
@@ -256,6 +298,6 @@ export function drawTable(ui) {
     txt(`${s.seats[s.winner].name.toUpperCase()} WINS!`, 195, H - 246, 27, '#f7f2e9', 900);
     button(host ? 'REMATCH' : 'WAITING FOR HOST', 30, H - 139, 330, 61, () => host && sendAction({ type: 'rematch' }), host ? 'gold' : 'dark');
   }
-  if (net.error || net.notice) txt((net.error || net.notice).slice(0, 45), 195, H - 55, 12, net.error ? '#ffadb8' : '#c8f5d9', 700);
+  if (s.stage !== 'lobby' && (net.error || net.notice)) txt((net.error || net.notice).slice(0, 45), 195, H - 55, 12, net.error ? '#ffadb8' : '#c8f5d9', 700);
   button('×', 346, 20, 34, 34, leaveTable, 'dark');
 }

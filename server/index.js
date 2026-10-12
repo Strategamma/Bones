@@ -12,7 +12,7 @@ const base = '/Bones/';
 const dist = resolve('dist');
 const rooms = new Map();
 const peers = new Map();
-const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.webmanifest': 'application/manifest+json' };
+const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webmanifest': 'application/manifest+json' };
 if (dataFile && existsSync(dataFile)) {
   try {
     const saved = JSON.parse(await readFile(dataFile, 'utf8'));
@@ -73,6 +73,7 @@ wss.on('connection', socket => {
         while (rooms.has(room.code)) room.code = room.code.slice(0, 5) + Math.floor(Math.random() * 10);
         rooms.set(room.code, room);
         membership = { room, seat };
+        socket.membership = membership;
         connection(room, seat, true);
         peers.set(`${room.code}:${seat}`, socket);
         send(socket, { type: 'joined', code: room.code, token: room.seats[seat].token, mode });
@@ -85,6 +86,7 @@ wss.on('connection', socket => {
         if (!room || room.mode !== mode) throw Error('Table not found on this server.');
         const seat = joinRoom(room, msg.name);
         membership = { room, seat };
+        socket.membership = membership;
         connection(room, seat, true);
         peers.set(`${room.code}:${seat}`, socket);
         send(socket, { type: 'joined', code: room.code, token: room.seats[seat].token, mode });
@@ -101,6 +103,7 @@ wss.on('connection', socket => {
         const prior = peers.get(key);
         if (prior && prior !== socket) prior.close(4001, 'Seat opened elsewhere');
         membership = { room, seat };
+        socket.membership = membership;
         peers.set(key, socket);
         connection(room, seat, true);
         send(socket, { type: 'joined', code: room.code, token: room.seats[seat].token, mode });
@@ -108,7 +111,25 @@ wss.on('connection', socket => {
         return;
       }
       if (msg.type === 'action') {
-        if (!membership) throw Error('Join a table first.');
+        if (!membership || peers.get(`${membership.room.code}:${membership.seat}`) !== socket) throw Error('Join a table first.');
+        if (msg.action?.type === 'kick') {
+          const { room, seat } = membership, target = msg.action.target;
+          if (seat !== room.host) throw Error('Only the host can remove a player.');
+          if (room.stage !== 'lobby') throw Error('Players can only be removed before the game starts.');
+          if (!Number.isInteger(target) || target < 0 || target >= room.seats.length || target === seat) throw Error('Choose another player.');
+          const removed = peers.get(`${room.code}:${target}`);
+          if (removed) { send(removed, { type: 'kicked' }); removed.membership.kicked = true; removed.close(4003, 'Removed by host'); }
+          room.seats.splice(target, 1);
+          if (target < room.host) room.host--;
+          for (const key of peers.keys()) if (key.startsWith(`${room.code}:`)) peers.delete(key);
+          for (const peer of wss.clients) if (peer.membership?.room === room && !peer.membership.kicked) {
+            if (peer.membership.seat > target) peer.membership.seat--;
+            peers.set(`${room.code}:${peer.membership.seat}`, peer);
+          }
+          room.last = 'A player was removed by the host.';
+          broadcast(room);
+          return;
+        }
         act(membership.room, membership.seat, msg.action);
         broadcast(membership.room);
         return;
@@ -117,7 +138,7 @@ wss.on('connection', socket => {
     } catch (error) { send(socket, { type: 'error', message: error.message }); }
   });
   socket.on('close', () => {
-    if (!membership) return;
+    if (!membership || membership.kicked) return;
     const { room, seat } = membership;
     const key = `${room.code}:${seat}`;
     if (peers.get(key) !== socket) return;

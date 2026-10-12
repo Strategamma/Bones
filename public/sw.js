@@ -1,4 +1,4 @@
-const CACHE='bones-arcade-v7';
+const CACHE='bones-arcade-v8';
 const root=new URL(self.registration.scope);
 self.addEventListener('install',event=>{event.waitUntil((async()=>{const cache=await caches.open(CACHE);const page=await fetch(root);const html=await page.clone().text();await cache.put(root.href,page);const assets=[new URL('manifest.webmanifest',root).href,...['bones-platform-logo.png','bones-icon-192.png','bones-icon-512.png'].map(name=>new URL(`assets/${name}`,root).href),...['menu-box','text-box','player-mat','button-gold','button-pink','button-ink','card-back','card-flower','card-skull','point-badge','winner-crown',...['coral','mint','amber','violet','blue','orchid'].map(color=>`card-back-${color}`)].map(name=>new URL(`assets/${name}.svg`,root).href),...Array.from(html.matchAll(/(?:src|href)="([^\"]*\/assets\/[^\"]+)"/g),m=>new URL(m[1],root).href)];await cache.addAll(assets);await self.skipWaiting()})())});
 self.addEventListener('activate',event=>{event.waitUntil((async()=>{for(const key of await caches.keys())if(key!==CACHE)await caches.delete(key);await self.clients.claim()})())});

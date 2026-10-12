@@ -21,7 +21,7 @@ If you create a Web Service manually, use:
 | Environment variables | `TABLE_MODE=internet`, `NODE_VERSION=22` |
 | Instances | 1 |
 
-After deployment, open `https://YOUR-SERVICE.onrender.com/Bones/` and choose **Internet Table**. The server address fills in automatically. You can also open the GitHub Pages game, choose **Internet Table**, and enter the Render service URL once. Create a table, then share its invite; each friend enters their own name. The invite includes the server address when needed.
+After deployment, open `https://YOUR-SERVICE.onrender.com/Bones/` or the GitHub Pages game and choose **Internet Table**. The configured Render address fills in automatically. Create a table, then share its invite; each friend enters their own name. The invite includes the server address when needed.
 
 Render's Free service has [ephemeral storage](https://render.com/docs/free). Rooms can disappear after a restart, redeploy, or idle spin-down. The game sends a low-rate WebSocket keepalive during an open table, but a service can still restart. For room recovery across restarts, use a compatible paid plan with a [persistent disk](https://render.com/docs/disks) and set `DATA_FILE=/var/data/rooms.json`. Keep the service at one instance: rooms are held in that instance's memory.
 
@@ -37,11 +37,13 @@ TABLE_MODE=lan PORT=10000 npm start
 
 Find that computer's local IP address, then open `http://YOUR-LAN-IP:10000/Bones/` on every phone. Choose **LAN Table**. The local server address fills in automatically; create a table and share its invite. Keep the computer running, and allow incoming connections on port 10000 if its firewall asks. LAN rooms save to `data/rooms.json` by default and can reload after a restart.
 
-From GitHub Pages, choosing **LAN Table** and entering the computer's local address takes the phone to that local game server. This avoids an insecure local WebSocket inside an HTTPS page. A phone must be on the same Wi-Fi (or otherwise able to reach the LAN computer).
+GitHub Pages cannot discover a private LAN server from the browser. A phone must open the local server's address directly to join a true same-Wi-Fi table; an HTTPS page cannot use an insecure local WebSocket. A phone must be on the same Wi-Fi (or otherwise able to reach the LAN computer).
 
 ## Play and recovery
 
 Three to six players join before the host starts. Everyone places a secret disc. The next player can place another disc or bid up to the number of discs on the table. After the first bid, no one can place more discs. The high bidder reveals their own stack first, then chooses others. Two successful challenges win; revealing a skull costs one hidden disc.
+
+Each table has its own code and seats, so multiple groups can play concurrently on one server. The host can use the gear button to transfer hosting to a connected player at any time or remove a player before the match starts. The app is installable from its menu on supported HTTPS browsers; on iPhone, use Safari's Share → Add to Home Screen option.
 
 If a player disconnects, the table pauses. Players can reconnect using their browser's saved seat token. Connected players may vote to continue, with host control transferred if needed.
 
