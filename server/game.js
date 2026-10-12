@@ -1,6 +1,8 @@
 import { randomBytes } from 'node:crypto';
 
 const id = (n = 6) => randomBytes(n).toString('base64url').toUpperCase().slice(0, n);
+const codeAlphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+export const newRoomCode = () => [...randomBytes(6)].map(byte => codeAlphabet[byte % codeAlphabet.length]).join('');
 const freshHand = () => ['flower', 'flower', 'flower', 'skull'];
 const alive = room => room.seats.map((s, i) => s.hand.length + s.stack.length ? i : -1).filter(i => i >= 0);
 const total = room => room.seats.reduce((n, s) => n + s.stack.length, 0);
@@ -23,7 +25,7 @@ export function makeRoom(mode, name) {
   if (!['lan', 'internet'].includes(mode)) throw Error('Choose a table type.');
   const player = cleanName(name);
   if (!player) throw Error('Enter a player name.');
-  const room = { code: id(6), mode, stage: 'lobby', seats: [], host: 0, turn: 0, starter: 0, round: 1, placed: 0, bid: 0, leader: -1, passed: [], challenger: -1, remaining: 0, flips: [], skullOwner: -1, last: '', winner: -1, resultKind: '', pausedStage: null, votes: [] };
+  const room = { code: newRoomCode(), mode, stage: 'lobby', seats: [], host: 0, turn: 0, starter: 0, round: 1, placed: 0, bid: 0, leader: -1, passed: [], challenger: -1, remaining: 0, flips: [], skullOwner: -1, last: '', winner: -1, resultKind: '', pausedStage: null, votes: [] };
   const seat = joinRoom(room, player);
   return { room, seat };
 }
@@ -60,6 +62,7 @@ function finishBid(room) {
 function finishRound(room) {
   room.seats.forEach(s => { s.hand.push(...s.stack); s.stack = []; });
   room.round++;
+  room.last = '';
   room.placed = 0;
   room.bid = 0;
   room.resultKind = '';
@@ -86,6 +89,7 @@ export function act(room, seat, action) {
     room.votes[seat] = true;
     const connected = alive(room).filter(i => room.seats[i].connected);
     if (connected.length >= 2 && connected.every(i => room.votes[i])) {
+      const priorHost = room.host;
       if (!room.seats[room.host]?.connected) room.host = connected[0];
       if ((room.pausedStage === 'reveal' || room.pausedStage === 'choose-lead') && !room.seats[room.challenger].connected || room.pausedStage === 'bid' && !room.seats[room.leader].connected || room.pausedStage === 'loss' && !room.seats[room.skullOwner].connected) {
         room.last = 'Host transferred. Waiting for the needed player to reconnect.';
@@ -95,13 +99,14 @@ export function act(room, seat, action) {
       room.stage = room.pausedStage;
       room.pausedStage = null;
       if (room.stage === 'place' && room.seats.every((s, i) => !alive(room).includes(i) || !s.connected || s.stack.length)) { room.stage = 'add'; room.turn = next(room, room.starter); }
-      room.last = `${room.seats[room.host].name} now hosts the table.`;
+      room.last = room.host === priorHost ? '' : `${room.seats[room.host].name} now hosts the table.`;
     }
     return;
   }
   if (room.stage === 'lobby') {
     if (action.type !== 'start' || seat !== room.host) throw Error('Only the host can start.');
     if (room.seats.filter(s => s.connected).length < 3) throw Error('Skull needs at least 3 connected players.');
+    if (room.seats.some(s => !s.connected)) throw Error('All seated players must reconnect or be removed before starting.');
     room.seats.forEach(s => { s.hand = freshHand(); s.stack = []; s.wins = 0; });
     room.starter = room.host;
     room.turn = room.starter;
@@ -111,6 +116,7 @@ export function act(room, seat, action) {
     room.resultKind = '';
     room.passed = [];
     room.winner = -1;
+    room.last = '';
     room.stage = 'place';
     return;
   }

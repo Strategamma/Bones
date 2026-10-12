@@ -23,7 +23,7 @@ async function client(url) {
 }
 test('LAN transport creates, joins, resumes, and keeps hands private', async t => {
   const port = await freePort();
-  const server = spawn(process.execPath, ['server/index.js'], { cwd: process.cwd(), env: { ...process.env, PORT: String(port), TABLE_MODE: 'lan', DATA_FILE: '' }, stdio: 'ignore' });
+  const server = spawn(process.execPath, ['server/index.js'], { cwd: process.cwd(), env: { ...process.env, PORT: String(port), TABLE_MODE: 'lan', DATA_FILE: '', DISABLE_LAN_DISCOVERY: '1' }, stdio: 'ignore' });
   t.after(() => server.kill());
   for (let i = 0; i < 30; i++) { try { const r = await fetch(`http://127.0.0.1:${port}/health`); if (r.ok) break; } catch {} await new Promise(r => setTimeout(r, 50)); }
   const health = await (await fetch(`http://127.0.0.1:${port}/health`)).json();
@@ -111,6 +111,6 @@ test('internet service serves the game and accepts WebSocket heartbeats', async 
   guest.send({ type: 'action', action: { type: 'kick', target: 0 } });
   assert.equal((await player.next('kicked')).type, 'kicked');
   assert.equal((await guest.next('state')).state.seats.length, 1);
-  assert.equal(otherRoom.send({ type: 'ping' }), undefined);
+  otherRoom.send({ type: 'ping' });
   assert.equal((await otherRoom.next('pong')).type, 'pong');
 });

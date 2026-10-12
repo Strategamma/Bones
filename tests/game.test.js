@@ -1,6 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeRoom, joinRoom, connection, act, view } from '../server/game.js';
+import { makeRoom, newRoomCode, joinRoom, connection, act, view } from '../server/game.js';
+
+test('new table codes avoid lookalike characters', () => {
+  for (let i = 0; i < 100; i++) assert.match(newRoomCode(), /^[A-HJ-NP-Z2-9]{6}$/);
+});
 
 function table() {
   const { room } = makeRoom('lan', 'Ada');
@@ -26,10 +30,14 @@ test('two successful challenges win; own stack flips first', () => {
   assert.equal(room.stage, 'result');
   assert.equal(view(room, 0).resultKind, 'flower');
   act(room, 0, { type: 'next' });
+  assert.equal(room.last, '');
   flowers(room); oneBid(room);
   act(room, 0, { type: 'flip', target: 0 });
   assert.equal(room.stage, 'win');
   assert.equal(room.winner, 0);
+  act(room, 0, { type: 'rematch' });
+  assert.equal(room.last, '');
+  assert.equal(room.stage, 'place');
 });
 test('opponent skull costs a hidden disc and does not leak hands', () => {
   const room = table();
@@ -69,6 +77,16 @@ test('host departure pauses and connected players vote for deterministic migrati
   assert.equal(room.stage, 'add');
   connection(room, 0, true);
   assert.equal(room.host, 1);
+});
+test('rejoining player resumes without a false host-change notice', () => {
+  const room = table();
+  act(room, 0, { type: 'place', disc: 'flower' });
+  connection(room, 1, false);
+  connection(room, 1, true);
+  for (const seat of [0, 1, 2]) act(room, seat, { type: 'continue' });
+  assert.equal(room.stage, 'place');
+  assert.equal(room.host, 0);
+  assert.equal(room.last, '');
 });
 test('out-of-turn placement and zero bids are rejected', () => {
   const room = table();

@@ -1,4 +1,5 @@
 export const INTERNET_SERVER = 'https://bones-lfxr.onrender.com';
+export const LAN_SERVER = 'http://bones.local:10000';
 
 export function playerName(saved, hint) {
   const preferred = typeof saved === 'string' ? saved.trim() : '';
@@ -7,6 +8,15 @@ export function playerName(saved, hint) {
 }
 
 export function defaultTableAddress(mode, hostname, origin, isLocal) {
-  if (mode === 'lan') return isLocal ? origin : '';
+  if (mode === 'lan') return isLocal ? origin : LAN_SERVER;
   return hostname.endsWith('.onrender.com') ? origin : INTERNET_SERVER;
+}
+
+export function localTableUrl(server, name, code = '') {
+  const target = new URL('/Bones/', server);
+  target.searchParams.set('table', 'lan');
+  target.searchParams.set('auto', '1');
+  if (code) target.searchParams.set('code', code);
+  target.hash = `arcadeName=${encodeURIComponent(name)}`;
+  return target.href;
 }

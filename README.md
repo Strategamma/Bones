@@ -27,17 +27,16 @@ Render's Free service has [ephemeral storage](https://render.com/docs/free). Roo
 
 ## LAN tables on the same Wi-Fi
 
-Render cannot host a LAN-only table because it runs on the public internet. Run the game on a computer connected to the same local network as the players' phones:
+Render cannot host a LAN-only table because it runs on the public internet. One computer on the Wi-Fi runs the local BONES host. After installing Node.js and downloading this repository, use **Start BONES LAN.command** on Mac or **Start BONES LAN.cmd** on Windows. The command-line equivalent is:
 
 ```sh
-npm ci --include=dev
-npm run build
-TABLE_MODE=lan PORT=10000 npm start
+npm_config_cache=/tmp/bones-npm-cache npm ci
+npm run lan
 ```
 
-Find that computer's local IP address, then open `http://YOUR-LAN-IP:10000/Bones/` on every phone. Choose **LAN Table**. The local server address fills in automatically; create a table and share its invite. Keep the computer running, and allow incoming connections on port 10000 if its firewall asks. LAN rooms save to `data/rooms.json` by default and can reload after a restart.
+Keep the host computer running, and allow incoming connections on port 10000 if its firewall asks. On phones connected to the same Wi-Fi, open the arcade game and choose **LAN Table**. BONES uses the local name `bones.local` to reach the host automatically; no IP entry or QR code is needed. The host can also open `http://bones.local:10000/Bones/` directly. Create a table and share its code or invite. Separate codes support multiple simultaneous games, with 3–6 players per game. LAN rooms save to `data/rooms.json` by default and can reload after a restart.
 
-GitHub Pages cannot discover a private LAN server from the browser. A phone must open the local server's address directly to join a true same-Wi-Fi table; an HTTPS page cannot use an insecure local WebSocket. A phone must be on the same Wi-Fi (or otherwise able to reach the LAN computer).
+The public HTTPS game navigates to the local host before connecting to its WebSocket, so gameplay stays on Wi-Fi and works without internet after the local page loads. If a router blocks multicast DNS or another host already claims `bones.local`, use **Change Server Address** as an advanced fallback and enter the fallback IP shown in the host window. The host and phones must be on the same local network; guest Wi-Fi isolation can block them. Browsers generally cannot install a PWA from a plain HTTP `.local` page, so install BONES from its public HTTPS page first.
 
 ## Play and recovery
 

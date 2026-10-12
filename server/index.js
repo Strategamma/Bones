@@ -3,7 +3,8 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, extname, resolve, dirname } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { makeRoom, joinRoom, seatForToken, connection, act, view } from './game.js';
+import { makeRoom, newRoomCode, joinRoom, seatForToken, connection, act, view } from './game.js';
+import { lanAddress, LAN_NAME, startLanDiscovery } from './lan-discovery.js';
 
 const port = Number(process.env.PORT || 10000);
 const mode = process.env.TABLE_MODE === 'internet' ? 'internet' : 'lan';
@@ -70,7 +71,7 @@ wss.on('connection', socket => {
       if (msg.type === 'create') {
         if (membership) throw Error('Already at a table.');
         const { room, seat } = makeRoom(mode, msg.name);
-        while (rooms.has(room.code)) room.code = room.code.slice(0, 5) + Math.floor(Math.random() * 10);
+        while (rooms.has(room.code)) room.code = newRoomCode();
         rooms.set(room.code, room);
         membership = { room, seat };
         socket.membership = membership;
@@ -147,4 +148,11 @@ wss.on('connection', socket => {
     broadcast(room);
   });
 });
-server.listen(port, '0.0.0.0', () => console.log(`Skull ${mode} table on 0.0.0.0:${port}`));
+server.listen(port, '0.0.0.0', () => {
+  console.log(`Skull ${mode} table on 0.0.0.0:${server.address().port}`);
+  if (mode === 'lan') {
+    const address = lanAddress();
+    if (process.env.DISABLE_LAN_DISCOVERY !== '1') startLanDiscovery(address);
+    console.log(address ? `LAN join: http://${LAN_NAME}:${server.address().port}${base} (fallback http://${address}:${server.address().port}${base})` : 'LAN join: connect this computer to the same Wi-Fi as the players.');
+  }
+});
