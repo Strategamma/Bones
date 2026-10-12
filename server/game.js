@@ -25,7 +25,7 @@ export function makeRoom(mode, name) {
   if (!['lan', 'internet'].includes(mode)) throw Error('Choose a table type.');
   const player = cleanName(name);
   if (!player) throw Error('Enter a player name.');
-  const room = { code: newRoomCode(), mode, stage: 'lobby', seats: [], host: 0, turn: 0, starter: 0, round: 1, placed: 0, bid: 0, leader: -1, passed: [], challenger: -1, remaining: 0, flips: [], skullOwner: -1, last: '', winner: -1, resultKind: '', pausedStage: null, votes: [] };
+  const room = { code: newRoomCode(), mode, stage: 'lobby', seats: [], host: 0, turn: 0, starter: 0, round: 1, placed: 0, bid: 0, leader: -1, passed: [], challenger: -1, remaining: 0, flips: [], skullOwner: -1, last: '', winner: -1, resultKind: '', discarded: null, pausedStage: null, votes: [] };
   const seat = joinRoom(room, player);
   return { room, seat };
 }
@@ -41,7 +41,7 @@ export function seatForToken(room, token) { return room.seats.findIndex(s => s.t
 export function connection(room, seat, connected) {
   room.seats[seat].connected = connected;
   if (connected && room.stage === 'lobby' && !room.seats[room.host]?.connected) room.host = seat;
-  if (!connected && alive(room).includes(seat) && room.stage !== 'lobby' && room.stage !== 'win' && room.stage !== 'paused') {
+  if (!connected && (alive(room).includes(seat) || seat === room.host || room.stage === 'choose-lead' && seat === room.challenger) && room.stage !== 'lobby' && room.stage !== 'win' && room.stage !== 'paused') {
     room.pausedStage = room.stage;
     room.stage = 'paused';
     room.votes = [];
@@ -66,9 +66,10 @@ function finishRound(room) {
   room.placed = 0;
   room.bid = 0;
   room.resultKind = '';
+  room.discarded = null;
   room.leader = -1;
   room.passed = [];
-  room.flips = [];
+  room.flips = []; room.challenger = -1; room.skullOwner = -1; room.remaining = 0; room.winner = -1;
   room.turn = alive(room).includes(room.starter) && room.seats[room.starter].connected ? room.starter : next(room, room.starter);
   room.stage = 'place';
 }
@@ -76,6 +77,11 @@ export function act(room, seat, action) {
   if (!action || typeof action !== 'object') throw Error('Invalid action.');
   const me = room.seats[seat];
   if (!me?.connected) throw Error('Reconnect before playing.');
+  if (action.type === 'rename') {
+    const name = cleanName(action.name);
+    if (!name) throw Error('Enter a player name.');
+    me.name = name; return;
+  }
   if (action.type === 'transfer-host') {
     if (seat !== room.host) throw Error('Only the host can transfer hosting.');
     if (!Number.isInteger(action.target) || action.target === seat || !room.seats[action.target]?.connected) throw Error('Choose a connected player.');
@@ -95,10 +101,11 @@ export function act(room, seat, action) {
         room.last = 'Host transferred. Waiting for the needed player to reconnect.';
         return;
       }
-      if (!room.seats[room.turn]?.connected) room.turn = next(room, room.turn, i => room.seats[i].connected);
+      if (!room.seats[room.turn]?.connected) room.turn = next(room, room.turn, i => room.pausedStage !== 'bid' || !room.passed[i]);
       room.stage = room.pausedStage;
       room.pausedStage = null;
-      if (room.stage === 'place' && room.seats.every((s, i) => !alive(room).includes(i) || !s.connected || s.stack.length)) { room.stage = 'add'; room.turn = next(room, room.starter); }
+      if (room.stage === 'bid' && connected.filter(i => !room.passed[i]).length === 1) finishBid(room);
+      if (room.stage === 'place' && room.seats.every((s, i) => !alive(room).includes(i) || !s.connected || s.stack.length)) { room.stage = 'add'; room.turn = room.seats[room.starter]?.connected ? room.starter : next(room, room.starter); }
       room.last = room.host === priorHost ? '' : `${room.seats[room.host].name} now hosts the table.`;
     }
     return;
@@ -114,6 +121,8 @@ export function act(room, seat, action) {
     room.placed = 0;
     room.bid = 0;
     room.resultKind = '';
+    room.discarded = null;
+    room.flips = []; room.challenger = -1; room.skullOwner = -1; room.remaining = 0; room.leader = -1; room.pausedStage = null; room.votes = [];
     room.passed = [];
     room.winner = -1;
     room.last = '';
@@ -123,7 +132,8 @@ export function act(room, seat, action) {
   if (room.stage === 'win') {
     if (action.type !== 'rematch' || seat !== room.host) throw Error('Only the host can start a rematch.');
     room.stage = 'lobby';
-    return act(room, seat, { type: 'start' });
+    try { return act(room, seat, { type: 'start' }); }
+    catch (error) { room.stage = 'win'; throw error; }
   }
   if (room.stage === 'result') {
     if (action.type !== 'next' || seat !== room.host) throw Error('Waiting for the host.');
@@ -140,7 +150,8 @@ export function act(room, seat, action) {
     const loser = room.seats[room.challenger];
     const cards = shuffle([...loser.hand, ...loser.stack]);
     if (!Number.isInteger(action.index) || action.index < 0 || action.index >= cards.length) throw Error('Choose a disc.');
-    cards.splice(action.index, 1);
+    const [discarded] = cards.splice(action.index, 1);
+    room.discarded = {owner:room.challenger,by:seat,disc:discarded,index:action.index};
     loser.hand = cards;
     loser.stack = [];
     room.seats.forEach((s, i) => { if (i !== room.challenger) { s.hand.push(...s.stack); s.stack = []; } });
@@ -154,15 +165,19 @@ export function act(room, seat, action) {
     room.stage = 'result';
     return;
   }
-  if (seat !== room.turn) throw Error('Wait for your turn.');
+  if (room.stage === 'place') {
+    if (action.type !== 'place') throw Error('Place your first card.');
+    if (!alive(room).includes(seat) || me.stack.length) throw Error('You already placed your first card.');
+  } else if (seat !== room.turn) throw Error('Wait for your turn.');
   if (room.stage === 'place' || room.stage === 'add') {
     if (action.type === 'place') {
-      const index = me.hand.indexOf(action.disc);
+      const index = Number.isInteger(action.index) ? action.index : me.hand.indexOf(action.disc);
+      if (index >= me.hand.length) throw Error('That card is not in your hand.');
       if (index < 0) throw Error('That disc is not in your hand.');
       me.stack.push(me.hand.splice(index, 1)[0]);
       if (room.stage === 'place') {
         room.placed++;
-        if (room.seats.every((s, i) => !alive(room).includes(i) || !s.connected || s.stack.length)) { room.stage = 'add'; room.turn = next(room, room.starter); }
+        if (room.seats.every((s, i) => !alive(room).includes(i) || !s.connected || s.stack.length)) { room.stage = 'add'; room.turn = room.seats[room.starter]?.connected ? room.starter : next(room, room.starter); }
         else room.turn = next(room, seat);
       } else room.turn = next(room, seat);
       return;
@@ -190,10 +205,15 @@ export function act(room, seat, action) {
     const ownLeft = room.seats[room.challenger].stack.length - room.flips.filter(f => f.owner === room.challenger).length;
     if (ownLeft > 0 && action.target !== room.challenger) throw Error('Reveal your own discs first.');
     const target = room.seats[action.target];
-    const index = target.stack.length - room.flips.filter(f => f.owner === action.target).length - 1;
-    if (index < 0) throw Error('That stack is empty.');
+    const position = action.position ?? 'top';
+    if (!['top','bottom'].includes(position)) throw Error('Choose the top or bottom card.');
+    const opened = new Set(room.flips.filter(f => f.owner === action.target).map(f => f.index));
+    const available = target.stack.map((_,i)=>i).filter(i=>!opened.has(i));
+    if (!available.length) throw Error('That stack is empty.');
+    const index = action.index === undefined ? (position === 'bottom' ? available[0] : available.at(-1)) : action.index;
+    if (!Number.isInteger(index) || !available.includes(index)) throw Error('Choose an unopened card.');
     const disc = target.stack[index];
-    room.flips.push({ owner: action.target, index, disc });
+    room.flips.push({ owner: action.target, index, position, disc });
     room.remaining--;
     if (disc === 'skull') {
       room.skullOwner = action.target;
@@ -211,13 +231,35 @@ export function act(room, seat, action) {
   }
   throw Error('That action is not available now.');
 }
+// Removing a seated player restarts an unfinished round so no bid references a missing seat.
+export function removePlayer(room, seat) {
+  const playing = !['lobby', 'win'].includes(room.stage);
+  room.seats.forEach(s => { s.hand.push(...s.stack); s.stack = []; });
+  const name = room.seats[seat].name;
+  room.seats.splice(seat, 1);
+  room.host = room.host === seat ? room.seats.findIndex(s => s.connected) : room.host - (seat < room.host ? 1 : 0);
+  if (room.host < 0) room.host = 0;
+  room.starter = room.host; room.turn = room.host;
+  room.placed = 0; room.bid = 0; room.leader = -1; room.passed = [];
+  room.challenger = -1; room.remaining = 0; room.flips = []; room.skullOwner = -1;
+  room.pausedStage = null; room.votes = []; room.resultKind = ''; room.discarded = null; room.winner = -1;
+  room.stage = playing ? 'place' : 'lobby';
+  if (playing) {
+    room.round++;
+    const remaining = alive(room);
+    if (remaining.length === 1) { room.winner = remaining[0]; room.resultKind = 'elimination'; room.stage = 'win'; }
+    else if (room.seats.filter(s => s.connected && s.hand.length).length < 2) { room.pausedStage = 'place'; room.stage = 'paused'; }
+    else if (!room.seats[room.turn]?.hand.length) room.turn = room.starter = next(room, room.host);
+  }
+  room.last = `${name} left the table.${playing ? ' A fresh round starts; points are kept.' : ''}`;
+}
 export function view(room, seat) {
   const mine = room.seats[seat];
   return {
     code: room.code, mode: room.mode, stage: room.stage, pausedStage: room.pausedStage,
     host: room.host, turn: room.turn, starter: room.starter, round: room.round,
     bid: room.bid, leader: room.leader, passed: room.passed, challenger: room.challenger,
-    remaining: room.remaining, flips: room.flips, skullOwner: room.skullOwner, resultKind: room.resultKind,
+    remaining: room.remaining, flips: room.flips, discarded: room.discarded || null, skullOwner: room.skullOwner, resultKind: room.resultKind,
     lossCount: room.stage === 'loss' ? room.seats[room.challenger].hand.length + room.seats[room.challenger].stack.length : 0,
     last: room.last, winner: room.winner, votes: room.votes, seat,
     hand: mine.hand, stack: mine.stack,

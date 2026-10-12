@@ -3,7 +3,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, extname, resolve, dirname } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { makeRoom, newRoomCode, joinRoom, seatForToken, connection, act, view } from './game.js';
+import { makeRoom, newRoomCode, joinRoom, seatForToken, connection, act, view, removePlayer } from './game.js';
 import { lanAddress, LAN_NAME, startLanDiscovery } from './lan-discovery.js';
 
 const port = Number(process.env.PORT || 10000);
@@ -43,6 +43,7 @@ function broadcast(room) {
     const socket = peers.get(`${room.code}:${i}`);
     if (socket) send(socket, { type: 'state', state: view(room, i) });
   }
+  publishRooms();
   persist();
 }
 const server = createServer(async (req, res) => {
@@ -60,6 +61,29 @@ const server = createServer(async (req, res) => {
   } catch { res.writeHead(404); res.end(); }
 });
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 4096 });
+function roomList() {
+  return [...rooms.values()].filter(room => room.mode === mode && room.seats.some(s => s.connected)).map(room => ({
+    code: room.code, host: room.seats[room.host]?.name || 'Friends',
+    players: room.seats.length, connected: room.seats.filter(s => s.connected).length, capacity: 6,
+    status: room.stage === 'lobby' ? 'waiting' : room.stage === 'win' ? 'finished' : room.stage === 'paused' ? 'paused' : 'playing',
+    joinable: room.stage === 'lobby' && room.seats.length < 6,
+  }));
+}
+function publishRooms() {
+  if (mode !== 'lan') return;
+  const list = roomList();
+  for (const peer of wss.clients) if (peer.roomDirectory) send(peer, { type: 'rooms', rooms: list });
+}
+function removeSeat(room, target) {
+  removePlayer(room, target);
+  for (const key of peers.keys()) if (key.startsWith(`${room.code}:`)) peers.delete(key);
+  for (const peer of wss.clients) if (peer.membership?.room === room && !peer.membership.kicked) {
+    if (peer.membership.seat > target) peer.membership.seat--;
+    peers.set(`${room.code}:${peer.membership.seat}`, peer);
+  }
+  if (!room.seats.length) rooms.delete(room.code);
+  broadcast(room);
+}
 wss.on('connection', socket => {
   let membership = null;
   socket.on('message', raw => {
@@ -68,6 +92,44 @@ wss.on('connection', socket => {
       if (!msg || typeof msg !== 'object') throw Error('Invalid request.');
       if (msg.type === 'ping') { send(socket, { type: 'pong' }); return; }
       if (msg.type === 'hello') { send(socket, { type: 'hello', mode }); return; }
+      if (msg.type === 'list-rooms') {
+        if (mode !== 'lan') throw Error('Room discovery is available on LAN only.');
+        socket.roomDirectory = true;
+        send(socket, { type: 'rooms', rooms: roomList() }); return;
+      }
+      if (msg.type === 'leave') {
+        if (!membership) return;
+        const { room, seat } = membership;
+        if (peers.get(`${room.code}:${seat}`) !== socket) throw Error('Seat opened elsewhere.');
+        peers.delete(`${room.code}:${seat}`);
+        membership = null; socket.membership = null;
+        removeSeat(room, seat);
+        send(socket, { type: 'left' }); return;
+      }
+      if (msg.type === 'auto-join') {
+        if (mode !== 'lan') throw Error('Automatic seating is available on LAN only.');
+        if (membership) throw Error('Already at a table.');
+        const saved = rooms.get(String(msg.code || '').toUpperCase());
+        const savedSeat = saved?.mode === mode ? seatForToken(saved, msg.token) : -1;
+        let room, seat;
+        if (savedSeat >= 0) {
+          room = saved; seat = savedSeat;
+          const prior = peers.get(`${room.code}:${seat}`);
+          if (prior && prior !== socket) prior.close(4001, 'Seat opened elsewhere');
+        } else {
+          room = [...rooms.values()].find(r => r.mode === mode && r.stage === 'lobby' && r.seats.length < 6 && r.seats.some(s => s.connected));
+          if (room) seat = joinRoom(room, msg.name || `Player ${room.seats.length + 1}`);
+          else {
+            ({ room, seat } = makeRoom(mode, msg.name || 'Player 1'));
+            while (rooms.has(room.code)) room.code = newRoomCode();
+            rooms.set(room.code, room);
+          }
+        }
+        membership = { room, seat }; socket.membership = membership;
+        peers.set(`${room.code}:${seat}`, socket); connection(room, seat, true);
+        send(socket, { type: 'joined', code: room.code, token: room.seats[seat].token, mode });
+        broadcast(room); return;
+      }
       if (msg.type === 'create') {
         if (membership) throw Error('Already at a table.');
         const { room, seat } = makeRoom(mode, msg.name);
@@ -97,7 +159,7 @@ wss.on('connection', socket => {
       if (msg.type === 'resume') {
         if (membership) throw Error('Already at a table.');
         const room = rooms.get(String(msg.code || '').toUpperCase());
-        if (!room) throw Error('Saved table not found.');
+        if (!room || room.mode !== mode) throw Error('Saved table not found.');
         const seat = seatForToken(room, msg.token);
         if (seat < 0) throw Error('Invalid seat token.');
         const key = `${room.code}:${seat}`;
@@ -116,19 +178,10 @@ wss.on('connection', socket => {
         if (msg.action?.type === 'kick') {
           const { room, seat } = membership, target = msg.action.target;
           if (seat !== room.host) throw Error('Only the host can remove a player.');
-          if (room.stage !== 'lobby') throw Error('Players can only be removed before the game starts.');
           if (!Number.isInteger(target) || target < 0 || target >= room.seats.length || target === seat) throw Error('Choose another player.');
           const removed = peers.get(`${room.code}:${target}`);
           if (removed) { send(removed, { type: 'kicked' }); removed.membership.kicked = true; removed.close(4003, 'Removed by host'); }
-          room.seats.splice(target, 1);
-          if (target < room.host) room.host--;
-          for (const key of peers.keys()) if (key.startsWith(`${room.code}:`)) peers.delete(key);
-          for (const peer of wss.clients) if (peer.membership?.room === room && !peer.membership.kicked) {
-            if (peer.membership.seat > target) peer.membership.seat--;
-            peers.set(`${room.code}:${peer.membership.seat}`, peer);
-          }
-          room.last = 'A player was removed by the host.';
-          broadcast(room);
+          removeSeat(room, target);
           return;
         }
         act(membership.room, membership.seat, msg.action);

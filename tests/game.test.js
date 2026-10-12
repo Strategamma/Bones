@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeRoom, newRoomCode, joinRoom, connection, act, view } from '../server/game.js';
+import { makeRoom, newRoomCode, joinRoom, connection, act, view, removePlayer } from '../server/game.js';
 
 test('new table codes avoid lookalike characters', () => {
   for (let i = 0; i < 100; i++) assert.match(newRoomCode(), /^[A-HJ-NP-Z2-9]{6}$/);
@@ -44,14 +44,16 @@ test('opponent skull costs a hidden disc and does not leak hands', () => {
   act(room, 0, { type: 'place', disc: 'flower' });
   act(room, 1, { type: 'place', disc: 'skull' });
   act(room, 2, { type: 'place', disc: 'flower' });
+  act(room, 0, { type: 'place', disc: 'flower' });
   act(room, 1, { type: 'place', disc: 'flower' });
   act(room, 2, { type: 'place', disc: 'flower' });
-  act(room, 0, { type: 'bid', amount: 3 });
+  act(room, 0, { type: 'bid', amount: 4 });
   act(room, 1, { type: 'pass' });
   act(room, 2, { type: 'pass' });
   act(room, 0, { type: 'flip', target: 0 });
+  act(room, 0, { type: 'flip', target: 0, position:'bottom' });
   act(room, 0, { type: 'flip', target: 1 });
-  act(room, 0, { type: 'flip', target: 1 });
+  act(room, 0, { type: 'flip', target: 1, position:'bottom' });
   assert.equal(room.stage, 'loss');
   assert.equal(view(room, 0).resultKind, 'skull');
   assert.equal(view(room, 0).seats[1].stack, 2);
@@ -88,12 +90,15 @@ test('rejoining player resumes without a false host-change notice', () => {
   assert.equal(room.host, 0);
   assert.equal(room.last, '');
 });
-test('out-of-turn placement and zero bids are rejected', () => {
-  const room = table();
-  assert.throws(() => act(room, 1, { type: 'place', disc: 'flower' }), /Wait/);
-  flowers(room);
-  assert.equal(room.turn, 1);
-  assert.throws(() => act(room, 1, { type: 'bid', amount: 0 }), /Bid above/);
+test('first placements are independent; duplicate cards, later out-of-turn moves and zero bids are rejected', () => {
+  const room=table();
+  act(room,2,{type:'place',index:0}); act(room,1,{type:'place',index:3});
+  assert.throws(()=>act(room,2,{type:'place',index:0}),/already placed/);
+  assert.throws(()=>act(room,0,{type:'place',index:4}),/not in your hand/);
+  act(room,0,{type:'place',index:0});
+  assert.equal(room.turn,0);
+  assert.throws(()=>act(room,1,{type:'place',index:0}),/Wait/);
+  assert.throws(()=>act(room,0,{type:'bid',amount:0}),/Bid above/);
 });
 test('maximum bid goes directly to reveal and skull loss can eliminate', () => {
   const room = table();
@@ -101,9 +106,7 @@ test('maximum bid goes directly to reveal and skull loss can eliminate', () => {
   act(room, 0, { type: 'place', disc: 'skull' });
   act(room, 1, { type: 'place', disc: 'flower' });
   act(room, 2, { type: 'place', disc: 'flower' });
-  act(room, 1, { type: 'place', disc: 'flower' });
-  act(room, 2, { type: 'place', disc: 'flower' });
-  act(room, 0, { type: 'bid', amount: 5 });
+  act(room, 0, { type: 'bid', amount: 3 });
   assert.equal(room.stage, 'reveal');
   act(room, 0, { type: 'flip', target: 0 });
   assert.equal(room.stage, 'loss');
@@ -113,20 +116,15 @@ test('maximum bid goes directly to reveal and skull loss can eliminate', () => {
   assert.equal(room.starter, 2);
   assert.equal(room.stage, 'result');
 });
-test('first add turn moves to the next player; bid cap grows with placed discs and locks placement', () => {
-  const room = table();
-  flowers(room);
-  assert.equal(room.stage, 'add');
-  assert.equal(room.turn, 1);
-  assert.equal(view(room, 1).total, 3);
-  assert.throws(() => act(room, 1, { type: 'bid', amount: 4 }), /up to the discs/);
-  act(room, 1, { type: 'place', disc: 'flower' });
-  assert.equal(room.turn, 2);
-  assert.equal(view(room, 2).total, 4);
-  act(room, 2, { type: 'bid', amount: 2 });
-  assert.equal(room.stage, 'bid');
-  assert.throws(() => act(room, 0, { type: 'place', disc: 'flower' }), /Raise or pass/);
-  assert.throws(() => act(room, 0, { type: 'bid', amount: 5 }), /up to the discs/);
+test('starter adds first, play continues clockwise, bid cap grows and bidding locks cards', () => {
+  const room=table();flowers(room);
+  assert.equal(room.stage,'add');assert.equal(room.turn,0);
+  assert.equal(view(room,0).total,3);
+  assert.throws(()=>act(room,0,{type:'bid',amount:4}),/up to the discs/);
+  act(room,0,{type:'place',index:0});assert.equal(room.turn,1);assert.equal(view(room,1).total,4);
+  act(room,1,{type:'bid',amount:2});assert.equal(room.stage,'bid');assert.equal(room.turn,2);
+  assert.throws(()=>act(room,2,{type:'place',index:0}),/Raise or pass/);
+  assert.throws(()=>act(room,2,{type:'bid',amount:5}),/up to the discs/);
 });
 test('host changes in lobby and after victory without taking control back', () => {
   const room = table();
@@ -149,4 +147,96 @@ test('only the host can transfer control to a connected player', () => {
   assert.throws(() => act(room, 0, { type: 'transfer-host', target: 2 }), /Only the host/);
   connection(room, 2, false);
   assert.throws(() => act(room, 1, { type: 'transfer-host', target: 2 }), /connected player/);
+});
+
+test('removal cancels an unfinished reveal, keeps earned points and preserves private cards', () => {
+  const room = table(); flowers(room); oneBid(room); act(room,0,{type:'flip',target:0});
+  act(room,0,{type:'next'}); flowers(room); oneBid(room);
+  const oldToken = room.seats[1].token;
+  removePlayer(room,1);
+  assert.equal(room.stage,'place'); assert.equal(room.seats[0].wins,1);
+  assert.equal(room.seats.length,2); assert.equal(room.seats.some(s=>s.token===oldToken),false);
+  assert.equal(room.challenger,-1); assert.deepEqual(room.flips,[]);
+  assert.equal(view(room,0).total,0); assert.equal(view(room,0).hand.length,4);
+  assert.equal(Object.hasOwn(view(room,0).seats[1],'hand'),false);
+  act(room,0,{type:'place',disc:'flower'}); act(room,1,{type:'place',disc:'flower'});
+  assert.equal(room.stage,'add');
+});
+
+test('mixed top and bottom reveals never repeat an index and only expose opened cards', () => {
+  const room=table();flowers(room);
+  for(let cycle=0;cycle<2;cycle++) for(const seat of [0,1,2]) act(room,seat,{type:'place',disc:'flower'});
+  act(room,0,{type:'place',disc:'skull'});act(room,1,{type:'place',disc:'skull'});act(room,2,{type:'place',disc:'skull'});
+  act(room,0,{type:'bid',amount:4});act(room,1,{type:'pass'});act(room,2,{type:'pass'});
+  assert.throws(()=>act(room,0,{type:'flip',target:0,position:'middle'}),/top or bottom/);
+  for(let i=0;i<3;i++) act(room,0,{type:'flip',target:0,position:'bottom'});
+  assert.deepEqual(room.flips.map(f=>f.index),[0,1,2]);
+  assert.equal(room.stage,'reveal');assert.equal(view(room,1).flips.every(f=>f.disc==='flower'),true);
+  act(room,0,{type:'flip',target:0,position:'top'});
+  assert.deepEqual(room.flips.map(f=>f.index),[0,1,2,3]);assert.equal(room.stage,'loss');
+  assert.throws(()=>act(room,1,{type:'discard',index:0}),/skull owner/);
+  act(room,0,{type:'discard',index:1});
+  assert.equal(room.seats[0].hand.length,3);assert.equal(view(room,1).discarded.owner,0);
+  assert.equal(view(room,1).discarded.by,0);assert.equal(Object.hasOwn(view(room,1).seats[0],'hand'),false);
+});
+
+test('a rematch rejected for a disconnected player keeps the victory screen recoverable', () => {
+  const room=table();flowers(room);oneBid(room);act(room,0,{type:'flip',target:0});
+  act(room,0,{type:'next'});flowers(room);oneBid(room);act(room,0,{type:'flip',target:0});
+  connection(room,2,false);
+  assert.throws(()=>act(room,0,{type:'rematch'}),/connected players/);
+  assert.equal(room.stage,'win');assert.equal(room.winner,0);assert.equal(room.seats[0].wins,2);
+  connection(room,2,true);act(room,0,{type:'rematch'});
+  assert.equal(room.stage,'place');assert.equal(room.round,1);assert.equal(room.leader,-1);
+  assert.equal(room.challenger,-1);assert.deepEqual(room.seats.map(s=>s.wins),[0,0,0]);
+});
+
+test('direct card selection accepts unopened indices and rejects repeats and invalid indices',()=>{
+ const room=table();flowers(room);
+ act(room,0,{type:'place',disc:'flower'});act(room,1,{type:'place',disc:'flower'});act(room,2,{type:'place',disc:'flower'});
+ act(room,0,{type:'bid',amount:3});act(room,1,{type:'pass'});act(room,2,{type:'pass'});
+ assert.throws(()=>act(room,0,{type:'flip',target:1,index:0}),/own/);
+ assert.throws(()=>act(room,0,{type:'flip',target:0,index:8}),/unopened/);
+ act(room,0,{type:'flip',target:0,index:0});
+ assert.equal(room.flips[0].index,0);
+ assert.throws(()=>act(room,0,{type:'flip',target:0,index:0}),/unopened/);
+ act(room,0,{type:'flip',target:0,index:1});act(room,0,{type:'flip',target:1,index:0});
+ assert.equal(room.stage,'result');assert.equal(room.seats[0].wins,1);
+});
+
+test('continuing an auction skips players who already passed', () => {
+  const room = table();
+  room.stage = 'lobby'; joinRoom(room, 'Dee'); connection(room, 3, true); act(room, 0, {type:'start'});
+  for (let i = 0; i < 4; i++) act(room, i, {type:'place', index:0});
+  act(room, 0, {type:'bid', amount:1});
+  act(room, 1, {type:'pass'});
+  act(room, 2, {type:'bid', amount:2});
+  act(room, 3, {type:'pass'});
+  connection(room, 0, false);
+  for (const i of [1, 2, 3]) act(room, i, {type:'continue'});
+  assert.equal(room.stage, 'reveal');
+  assert.equal(room.challenger, 2);
+  assert.equal(room.turn, 2);
+});
+
+test('continuing an auction retains clockwise order among eligible bidders', () => {
+  const room = table(); room.stage = 'lobby';
+  joinRoom(room, 'Dee'); joinRoom(room, 'Eve');
+  connection(room, 3, true); connection(room, 4, true); act(room, 0, {type:'start'});
+  for (let i = 0; i < 5; i++) act(room, i, {type:'place', index:0});
+  act(room, 0, {type:'bid', amount:1}); act(room, 1, {type:'pass'});
+  act(room, 2, {type:'bid', amount:2}); act(room, 3, {type:'pass'}); act(room, 4, {type:'bid', amount:3});
+  connection(room, 0, false);
+  for (const i of [1, 2, 3, 4]) act(room, i, {type:'continue'});
+  assert.equal(room.stage, 'bid'); assert.equal(room.turn, 2);
+  act(room, 2, {type:'pass'}); assert.equal(room.stage, 'reveal'); assert.equal(room.challenger, 4);
+});
+
+test('an eliminated host disconnecting between rounds permits host migration', () => {
+  const room = table(); room.seats[0].hand = []; room.stage = 'result';
+  connection(room, 0, false);
+  assert.equal(room.stage, 'paused'); assert.equal(room.pausedStage, 'result');
+  act(room, 1, {type:'continue'}); act(room, 2, {type:'continue'});
+  assert.equal(room.host, 1); assert.equal(room.stage, 'result');
+  act(room, 1, {type:'next'}); assert.equal(room.stage, 'place');
 });

@@ -1,5 +1,5 @@
-Goal: make menu, table setup and reveal choices visually consistent and easy to use on phones.
-Scope: illustrated table choices, themed setup form, face-down reveal stacks, responsive spacing and clear prompts.
-Approach: reuse matte SVG assets and palette; give each screen a clear primary action; replace reveal text buttons with illustrated stack targets while preserving legal actions.
-Risks: short screens and six players can crowd controls; preserve scrolling for forms and size canvas content to its available height.
-Verification: build and 19 tests pass; browser QA at 320×568, 390×568, 390×844 and desktop covers setup, placement, bidding, legal reveals, discard, victory and rematch. No console errors. Phone LAN reachability and installed offline behavior remain unverified.
+Goal: improve the shared-table feel, visual hierarchy, readable navigation and card size.
+Scope: existing canvas/DOM UI; preserve game rules and room flows.
+Approach: one illustrated felt table with colored seat markers, stronger primary action prompts, larger responsive cards and captions.
+Risks: six-player short-phone clearance and private/public card distinction.
+Verification: 27 tests and production build pass; browser six-player placement/bidding, safe/opponent-skull/discard and narrow/short-phone screenshots. Native card targets stay at least56×64 physical pixels. Changes remain local.

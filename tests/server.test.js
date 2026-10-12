@@ -89,6 +89,8 @@ test('internet service serves the game and accepts WebSocket heartbeats', async 
   assert.equal((await player.next('hello')).mode, 'internet');
   player.send({ type: 'ping' });
   assert.equal((await player.next('pong')).type, 'pong');
+  player.send({type:'list-rooms'}); assert.match((await player.next('error')).message,/LAN only/);
+  player.send({type:'auto-join',name:'Ada'}); assert.match((await player.next('error')).message,/LAN only/);
   player.send({ type: 'create', name: 'Ada' });
   const first = await player.next('joined');
   await player.next('state');
@@ -113,4 +115,57 @@ test('internet service serves the game and accepts WebSocket heartbeats', async 
   assert.equal((await guest.next('state')).state.seats.length, 1);
   otherRoom.send({ type: 'ping' });
   assert.equal((await otherRoom.next('pong')).type, 'pong');
+});
+
+test('LAN auto seating, live directory, capacity, explicit rooms and active removal', async t => {
+  const port = await freePort();
+  const server = spawn(process.execPath, ['server/index.js'], { cwd: process.cwd(), env: { ...process.env, PORT: String(port), TABLE_MODE: 'lan', DATA_FILE: '', DISABLE_LAN_DISCOVERY: '1' }, stdio: 'ignore' });
+  t.after(() => server.kill());
+  for (let i=0;i<30;i++) { try { if ((await fetch(`http://127.0.0.1:${port}/health`)).ok) break; } catch {} await new Promise(r=>setTimeout(r,50)); }
+  const clients = []; t.after(() => clients.forEach(c=>c.close()));
+  const open = async () => { const c = await client(`ws://127.0.0.1:${port}/ws`); clients.push(c); return c; };
+  const watcher = await open(); watcher.send({type:'list-rooms'});
+  assert.deepEqual((await watcher.next('rooms')).rooms, []);
+  const seated = [], tokens = [];
+  for (let i=0;i<7;i++) {
+    const c = await open(); seated.push(c); c.send({type:'auto-join',name:`Guest ${i}`});
+    tokens.push(await c.next('joined')); await c.next('state');
+    const directory = (await watcher.next('rooms')).rooms;
+    assert.equal(directory[0].players, Math.min(i+1,6));
+    assert.equal(directory[0].capacity,6);
+    assert.equal(JSON.stringify(directory).includes(tokens[0].token),false);
+    assert.equal(Object.hasOwn(directory[0],'hand'),false);
+    assert.equal(tokens[i].code === tokens[0].code, i<6);
+  }
+  const extra = await open(); extra.send({type:'create',name:'Another host'});
+  const extraSeat = await extra.next('joined'); await extra.next('state');
+  assert.notEqual(extraSeat.code,tokens[6].code);
+  assert.equal((await watcher.next('rooms')).rooms.length,3);
+  // Consume queued lobby broadcasts before asserting the game transition.
+  seated[0].send({type:'action',action:{type:'start'}});
+  assert.equal((await watcher.next('rooms')).rooms[0].status,'playing');
+  for (;;) { if ((await seated[0].next('state')).state.stage==='place') break; }
+  seated[0].send({type:'action',action:{type:'place',disc:'skull'}});
+  assert.equal((await seated[0].next('state')).state.turn,1); await watcher.next('rooms');
+  seated[0].send({type:'action',action:{type:'kick',target:1}});
+  await seated[1].next('kicked');
+  const reset = (await seated[0].next('state')).state;
+  assert.equal(reset.seats.length,5); assert.equal(reset.stage,'place');
+  assert.equal(reset.round,2); assert.equal(reset.total,0); assert.equal(reset.turn,0);
+  assert.deepEqual(reset.hand,['flower','flower','flower','skull']);
+  assert.equal((await watcher.next('rooms')).rooms[0].players,5);
+  const expelled = await open(); expelled.send({type:'resume',code:tokens[1].code,token:tokens[1].token});
+  assert.match((await expelled.next('error')).message,/Invalid seat token/);
+  // A reindexed peer keeps its private hand and can act at the correct new seat.
+  seated[0].send({type:'action',action:{type:'place',disc:'flower'}}); await seated[0].next('state'); await watcher.next('rooms');
+  seated[2].send({type:'action',action:{type:'place',disc:'flower'}});
+  const advanced = (await seated[0].next('state')).state; assert.equal(advanced.turn,2); await watcher.next('rooms');
+  extra.send({type:'leave'}); await extra.next('left');
+  assert.equal((await watcher.next('rooms')).rooms.length,2);
+  extra.send({type:'auto-join',name:'Moved'}); const moved = await extra.next('joined');
+  assert.equal(moved.code,tokens[6].code);
+  await watcher.next('rooms');
+  const resumed = await open(); resumed.send({type:'auto-join',code:tokens[0].code,token:tokens[0].token});
+  assert.equal((await resumed.next('joined')).token,tokens[0].token);
+  assert.equal((await resumed.next('state')).state.seat,0);
 });
