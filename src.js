@@ -3,11 +3,13 @@ import { net, openTable, resumeLast, drawTable } from './network.js';
 import { canvasGeometry } from './layout.js';
 import { playSfx, soundEnabled, toggleSound } from './audio.js';
 import { showRulebook } from './rulebook.js';
+import { playerName } from './entry.js';
 const canvas=document.querySelector('#game'),c=canvas.getContext('2d');
 const colors=['#e98493','#72bdaa','#dbaa70','#8d78be','#78a9cb','#b680bc'];
 const colorNames=['coral','mint','amber','violet','blue','orchid'];
-const names=['You'];
-const hash=new URLSearchParams(location.hash.slice(1)),hint=hash.get('arcadeName')?.trim();if(hash.has('arcadeName')){hash.delete('arcadeName');history.replaceState(null,'',location.pathname+location.search+(hash.size?'#'+hash:''))}if(hint&&hint.length<=32)names[0]=hint;
+const hash=new URLSearchParams(location.hash.slice(1)),hint=hash.get('arcadeName');if(hash.has('arcadeName')){hash.delete('arcadeName');history.replaceState(history.state,'',location.pathname+location.search+(hash.size?'#'+hash:''))}
+let savedName='';try{savedName=localStorage.getItem('skull-name')||''}catch{}
+const names=[playerName(savedName,hint)];
 const S={phase:'menu',clock:0,hoverX:-100,hoverY:-100,hoverLabel:'',pressX:0,pressY:0,pressAt:-10,phaseKey:'',phaseAt:0,stackCounts:[],stackSeat:-1,stackAt:-10,bidValue:0,bidAt:-10,pointCounts:[],pointSeat:-1,pointAt:-10,soundStage:'',flipCount:0};
 let W=390,H=844,scale=1,spots=[];
 const assetNames=['menu-box','text-box','player-mat','button-gold','button-pink','button-ink','card-back','card-flower','card-skull','point-badge','winner-crown',...colorNames.map(name=>`card-back-${name}`)];

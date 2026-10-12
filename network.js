@@ -1,5 +1,6 @@
 import { soundEnabled, toggleSound } from './audio.js';
 import { showRulebook } from './rulebook.js';
+import { defaultTableAddress } from './entry.js';
 
 export const net = { mode: null, state: null, socket: null, url: '', token: '', code: '', error: '', connected: false, draft: 1, onChange: () => {}, retry: 0, manualClose: false };
 const shell = document.createElement('div');
@@ -25,7 +26,7 @@ export function openTable(mode, name, code = '') {
   $('#table-title').textContent = mode === 'lan' ? 'LAN TABLE' : 'INTERNET TABLE';
   $('#table-detail').textContent = mode === 'lan' ? 'Play together on the same Wi-Fi. Each player uses their own phone.' : 'Play together from anywhere. Each player uses their own phone.';
   $('#table-name').value = name || stored('skull-name');
-  $('#table-address').value = new URLSearchParams(location.search).get('server') || stored(`skull-${mode}-url`) || (mode === 'lan' && localServer() ? location.origin : mode === 'internet' && location.hostname.endsWith('onrender.com') ? location.origin : '');
+  $('#table-address').value = new URLSearchParams(location.search).get('server') || stored(`skull-${mode}-url`) || defaultTableAddress(mode, location.hostname, location.origin, localServer());
   $('#table-code').value = code;
   $('#address-title').textContent = mode === 'lan' ? 'LAN server address' : 'Internet server address';
   $('#table-address').placeholder = mode === 'lan' ? 'http://192.168.1.10:3000' : 'https://your-game.onrender.com';
