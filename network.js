@@ -67,10 +67,13 @@ function connect(first) {
   if (net.socket) { net.manualClose = true; net.socket.close(); }
   net.manualClose = false;
   const socket = new WebSocket(socketUrl(net.url));
+  let heartbeat;
   net.socket = socket; net.connected = false; net.onChange();
   socket.onopen = () => {
+    if (net.socket !== socket) return;
     net.connected = true; net.retry = 0; net.error = '';
     socket.send(JSON.stringify({ type: 'hello' }));
+    heartbeat = setInterval(() => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'ping' })); }, 120000);
     net.onChange();
   };
   socket.onmessage = event => {
@@ -97,6 +100,7 @@ function connect(first) {
     net.onChange();
   };
   socket.onclose = () => {
+    clearInterval(heartbeat);
     if (net.socket !== socket) return;
     net.connected = false;
     if (net.manualClose) return;

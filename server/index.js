@@ -7,7 +7,7 @@ import { makeRoom, joinRoom, seatForToken, connection, act, view } from './game.
 
 const port = Number(process.env.PORT || 10000);
 const mode = process.env.TABLE_MODE === 'internet' ? 'internet' : 'lan';
-const dataFile = process.env.DATA_FILE || (mode === 'lan' ? './data/rooms.json' : '');
+const dataFile = process.env.DATA_FILE ?? (mode === 'lan' ? './data/rooms.json' : '');
 const base = '/Bones/';
 const dist = resolve('dist');
 const rooms = new Map();
@@ -46,7 +46,7 @@ function broadcast(room) {
 }
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-  if (url.pathname === '/health') { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok: true, mode })); return; }
+  if (url.pathname === '/health') { const ok = existsSync(join(dist, 'index.html')); res.writeHead(ok ? 200 : 503, { 'Content-Type': 'application/json' }); res.end(JSON.stringify({ ok, mode })); return; }
   if (url.pathname === '/') { res.writeHead(302, { Location: base }); res.end(); return; }
   if (!url.pathname.startsWith(base)) { res.writeHead(404); res.end(); return; }
   const rel = decodeURIComponent(url.pathname.slice(base.length)) || 'index.html';
@@ -65,6 +65,7 @@ wss.on('connection', socket => {
     try {
       const msg = JSON.parse(String(raw));
       if (!msg || typeof msg !== 'object') throw Error('Invalid request.');
+      if (msg.type === 'ping') { send(socket, { type: 'pong' }); return; }
       if (msg.type === 'hello') { send(socket, { type: 'hello', mode }); return; }
       if (msg.type === 'create') {
         if (membership) throw Error('Already at a table.');

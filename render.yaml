@@ -3,9 +3,10 @@ services:
     name: skull-internet-table
     runtime: node
     plan: free
-    buildCommand: npm ci && npm run build
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /health
+    autoDeployTrigger: commit
     envVars:
       - key: TABLE_MODE
         value: internet

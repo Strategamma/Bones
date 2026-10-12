@@ -1,37 +1,44 @@
 # Skull
 
-A phone-first Skull game with three ways to play: pass one phone, join a LAN table, or join an internet table. The table server keeps disc faces private and validates every move.
+A phone-first Skull game with separate **LAN (same Wi-Fi)** and **Internet** tables. Every player uses their own phone. The table server keeps hands private and validates moves.
 
-## Internet table on Render
+## Internet tables on Render
 
-Create a Render **Web Service** from this repository using `render.yaml` (Blueprint), or set these commands manually:
+The repository includes a one-service [`render.yaml`](render.yaml) Blueprint. In Render, choose **New → Blueprint**, connect this GitHub repository, and deploy it. The service runs in `internet` mode.
 
-- Build: `npm ci && npm run build`
-- Start: `npm start`
-- Environment: `TABLE_MODE=internet`, Node 22
+If you create a Web Service manually, use:
 
-The Blueprint uses Render's free web-service plan. When Render gives you an `https://…onrender.com` URL, open the game on GitHub Pages, choose **Internet Table**, and enter that address. Create a table and share its invite link. Each friend opens the invite and enters their own name. Opening the Render URL itself also works; it serves the game at `/Bones/`.
+| Setting | Value |
+| --- | --- |
+| Language | Node |
+| Build command | `npm ci --include=dev && npm run build` |
+| Start command | `npm start` |
+| Health check path | `/health` |
+| Environment variables | `TABLE_MODE=internet`, `NODE_VERSION=22` |
+| Instances | 1 |
 
-Rooms run on one server instance. The free plan has ephemeral storage, so a Render restart or redeploy can end an in-progress room. A persistent disk with `DATA_FILE=/var/data/rooms.json` can preserve rooms across restarts on a compatible paid plan. Keep the service at one instance unless shared storage and coordinated room routing are added.
+After deployment, open `https://YOUR-SERVICE.onrender.com/Bones/` and choose **Internet Table**. The server address fills in automatically. You can also open the GitHub Pages game, choose **Internet Table**, and enter the Render service URL once. Create a table, then share its invite; each friend enters their own name. The invite includes the server address when needed.
 
-## LAN table
+Render's Free service has [ephemeral storage](https://render.com/docs/free). Rooms can disappear after a restart, redeploy, or idle spin-down. The game sends a low-rate WebSocket keepalive during an open table, but a service can still restart. For room recovery across restarts, use a compatible paid plan with a [persistent disk](https://render.com/docs/disks) and set `DATA_FILE=/var/data/rooms.json`. Keep the service at one instance: rooms are held in that instance's memory.
 
-On a computer connected to the same Wi‑Fi as the phones:
+## LAN tables on the same Wi-Fi
+
+Render cannot host a LAN-only table because it runs on the public internet. Run the game on a computer connected to the same local network as the players' phones:
 
 ```sh
-npm ci
+npm ci --include=dev
 npm run build
 TABLE_MODE=lan PORT=10000 npm start
 ```
 
-Find that computer's local IP address and open `http://YOUR-LAN-IP:10000/Bones/` on every phone. Choose **LAN Table**, create a table, and share its invite link. Allow incoming connections to port 10000 if the computer's firewall asks. The local server saves rooms in `data/rooms.json` and can reload them after a restart. A LAN table stays on the local computer; the Render service hosts only internet tables.
+Find that computer's local IP address, then open `http://YOUR-LAN-IP:10000/Bones/` on every phone. Choose **LAN Table**. The local server address fills in automatically; create a table and share its invite. Keep the computer running, and allow incoming connections on port 10000 if its firewall asks. LAN rooms save to `data/rooms.json` by default and can reload after a restart.
 
-A phone opening the GitHub Pages version can also choose **LAN Table** and enter the computer's address. It will navigate to the local server because an HTTPS page cannot use an insecure local WebSocket connection.
+From GitHub Pages, choosing **LAN Table** and entering the computer's local address takes the phone to that local game server. This avoids an insecure local WebSocket inside an HTTPS page. A phone must be on the same Wi-Fi (or otherwise able to reach the LAN computer).
 
 ## Play and recovery
 
-Three to six players join before the host starts. Players place a private disc, add discs or bid, then the high bidder flips their own stack before choosing others. Two successful challenges win. A skull costs the challenger one hidden disc. Each player retains a private seat token in their browser for reconnecting.
+Three to six players join before the host starts. Everyone places a secret disc. The next player can place another disc or bid up to the number of discs on the table. After the first bid, no one can place more discs. The high bidder reveals their own stack first, then chooses others. Two successful challenges win; revealing a skull costs one hidden disc.
 
-If a player disconnects during play, the table pauses. Connected players vote to continue; the lowest-numbered connected seat becomes host. If the active challenger or another player needed to finish the current resolution is offline, the table waits for their return. The previous host can rejoin without reclaiming control.
+If a player disconnects, the table pauses. Players can reconnect using their browser's saved seat token. Connected players may vote to continue, with host control transferred if needed.
 
-`npm test` runs the server rules and WebSocket checks. `npm run build` verifies the frontend bundle.
+`npm test` builds the frontend and runs the rule and WebSocket tests.

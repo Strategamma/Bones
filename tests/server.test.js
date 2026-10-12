@@ -34,6 +34,8 @@ test('LAN transport creates, joins, resumes, and keeps hands private', async t =
   const b = await client(`ws://127.0.0.1:${port}/ws`);
   const c = await client(`ws://127.0.0.1:${port}/ws`);
   t.after(() => { a.close(); b.close(); c.close(); });
+  a.send({ type: 'ping' });
+  assert.equal((await a.next('pong')).type, 'pong');
   a.send({ type: 'create', name: 'Ada' });
   const joinedA = await a.next('joined');
   await a.next('state');
@@ -63,4 +65,23 @@ test('LAN transport creates, joins, resumes, and keeps hands private', async t =
   const resumed = (await replacement.next('state')).state;
   assert.equal(resumed.seat, 1);
   assert.equal(resumed.stage, 'paused');
+});
+test('internet service serves the game and accepts WebSocket heartbeats', async t => {
+  const port = await freePort();
+  const server = spawn(process.execPath, ['server/index.js'], { cwd: process.cwd(), env: { ...process.env, PORT: String(port), TABLE_MODE: 'internet', DATA_FILE: '' }, stdio: 'ignore' });
+  t.after(() => server.kill());
+  let health;
+  for (let i = 0; i < 30; i++) {
+    try { const response = await fetch(`http://127.0.0.1:${port}/health`); if (response.ok) { health = await response.json(); break; } } catch {}
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  assert.deepEqual(health, { ok: true, mode: 'internet' });
+  const root = await fetch(`http://127.0.0.1:${port}/`, { redirect: 'manual' });
+  assert.equal(root.headers.get('location'), '/Bones/');
+  const player = await client(`ws://127.0.0.1:${port}/ws`);
+  t.after(() => player.close());
+  player.send({ type: 'hello' });
+  assert.equal((await player.next('hello')).mode, 'internet');
+  player.send({ type: 'ping' });
+  assert.equal((await player.next('pong')).type, 'pong');
 });
