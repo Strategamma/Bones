@@ -34,13 +34,25 @@ export function joinRoom(room, name) {
   const player = cleanName(name);
   if (!player) throw Error('Enter a player name.');
   const seat = room.seats.length;
-  room.seats.push({ name: player, token: id(32), hand: freshHand(), stack: [], wins: 0, connected: false });
+  room.seats.push({ name: player, id:id(16), token: id(32), hand: freshHand(), stack: [], wins: 0, sessionWins: 0, connected: false, ready: false });
   return seat;
+}
+export function addBot(room, seat) {
+  if (seat !== room.host || !room.seats[seat]?.connected) throw Error('Only the host can add a bot.');
+  const names = new Set(room.seats.map(s => s.name));
+  let n = 1;
+  while (names.has(`Bot ${n}`)) n++;
+  const target = joinRoom(room, `Bot ${n}`);
+  room.seats[target].bot = true;
+  room.seats[target].connected = true;
+  room.seats[target].ready = true;
+  return target;
 }
 export function seatForToken(room, token) { return room.seats.findIndex(s => s.token === token); }
 export function connection(room, seat, connected) {
   room.seats[seat].connected = connected;
-  if (connected && room.stage === 'lobby' && !room.seats[room.host]?.connected) room.host = seat;
+  if (!connected && room.stage === 'lobby') room.seats[seat].ready = false;
+  if (connected && room.stage === 'lobby' && (!room.seats[room.host]?.connected || room.seats[room.host].bot)) room.host = seat;
   if (!connected && (alive(room).includes(seat) || seat === room.host || room.stage === 'choose-lead' && seat === room.challenger) && room.stage !== 'lobby' && room.stage !== 'win' && room.stage !== 'paused') {
     room.pausedStage = room.stage;
     room.stage = 'paused';
@@ -48,7 +60,7 @@ export function connection(room, seat, connected) {
     room.last = `${room.seats[seat].name} disconnected. Waiting for the table.`;
   }
   if (!connected && (room.stage === 'lobby' || room.stage === 'win') && seat === room.host) {
-    const candidate = room.seats.findIndex(s => s.connected);
+    const candidate = room.seats.findIndex(s => s.connected && !s.bot);
     if (candidate >= 0) room.host = candidate;
   }
 }
@@ -60,7 +72,7 @@ function finishBid(room) {
   room.stage = 'reveal';
 }
 function finishRound(room) {
-  room.seats.forEach(s => { s.hand.push(...s.stack); s.stack = []; });
+  room.seats.forEach(s => { s.hand.push(...s.stack); s.stack = []; s.bid = 0; });
   room.round++;
   room.last = '';
   room.placed = 0;
@@ -73,10 +85,34 @@ function finishRound(room) {
   room.turn = alive(room).includes(room.starter) && room.seats[room.starter].connected ? room.starter : next(room, room.starter);
   room.stage = 'place';
 }
+export function automaticAction(room){
+ if(room.stage==='reveal'&&room.seats[room.challenger]?.connected){
+  const owner=room.challenger,stack=room.seats[owner].stack;
+  const index=stack.map((_,i)=>i).filter(i=>!room.flips.some(f=>f.owner===owner&&f.index===i)).at(-1);
+  if(index!==undefined)return {seat:owner,action:{type:'flip',target:owner,index}};
+ }
+ if(room.stage==='loss'&&room.seats[room.skullOwner]?.connected)return {seat:room.skullOwner,action:{type:'discard',index:0}};
+ return null;
+}
+function crownWinner(room,seat,kind){
+ room.winner=seat;if(kind)room.resultKind=kind;room.stage='win';
+ room.seats[seat].sessionWins=(room.seats[seat].sessionWins||0)+1;
+}
 export function act(room, seat, action) {
   if (!action || typeof action !== 'object') throw Error('Invalid action.');
   const me = room.seats[seat];
   if (!me?.connected) throw Error('Reconnect before playing.');
+  if (action.type === 'ready') {
+    if (room.stage !== 'lobby' || typeof action.ready !== 'boolean') throw Error('Readiness can only change in the lobby.');
+    me.ready = action.ready;
+    return;
+  }
+  if (action.type === 'pause' && !['lobby','win','paused'].includes(room.stage)) {
+    if (!alive(room).includes(seat)) throw Error('Only a player still in the match can pause.');
+    room.pausedStage = room.stage; room.stage = 'paused'; room.votes = [];
+    room.last = `${me.name} paused the table. Vote together to continue.`;
+    return;
+  }
   if (action.type === 'rename') {
     const name = cleanName(action.name);
     if (!name) throw Error('Enter a player name.');
@@ -84,7 +120,7 @@ export function act(room, seat, action) {
   }
   if (action.type === 'transfer-host') {
     if (seat !== room.host) throw Error('Only the host can transfer hosting.');
-    if (!Number.isInteger(action.target) || action.target === seat || !room.seats[action.target]?.connected) throw Error('Choose a connected player.');
+    if (!Number.isInteger(action.target) || action.target === seat || (!room.seats[action.target]?.connected || room.seats[action.target].bot)) throw Error('Choose a connected player.');
     room.host = action.target;
     room.last = `${room.seats[action.target].name} now hosts the table.`;
     return;
@@ -96,7 +132,7 @@ export function act(room, seat, action) {
     const connected = alive(room).filter(i => room.seats[i].connected);
     if (connected.length >= 2 && connected.every(i => room.votes[i])) {
       const priorHost = room.host;
-      if (!room.seats[room.host]?.connected) room.host = connected[0];
+      if (!room.seats[room.host]?.connected) room.host = connected.find(i => !room.seats[i].bot) ?? room.host;
       if ((room.pausedStage === 'reveal' || room.pausedStage === 'choose-lead') && !room.seats[room.challenger].connected || room.pausedStage === 'bid' && !room.seats[room.leader].connected || room.pausedStage === 'loss' && !room.seats[room.skullOwner].connected) {
         room.last = 'Host transferred. Waiting for the needed player to reconnect.';
         return;
@@ -114,7 +150,9 @@ export function act(room, seat, action) {
     if (action.type !== 'start' || seat !== room.host) throw Error('Only the host can start.');
     if (room.seats.filter(s => s.connected).length < 3) throw Error('Skull needs at least 3 connected players.');
     if (room.seats.some(s => !s.connected)) throw Error('All seated players must reconnect or be removed before starting.');
-    room.seats.forEach(s => { s.hand = freshHand(); s.stack = []; s.wins = 0; });
+    if (room.seats.some((s, i) => i !== room.host && !s.bot && !s.ready)) throw Error('Ask every guest to tap I’M READY before starting.');
+    room.seats.forEach(s => { s.ready = true; });
+    room.seats.forEach(s => { s.hand = freshHand(); s.stack = []; s.wins = 0; s.bid = 0; s.rematchReady=false; });
     room.starter = room.host;
     room.turn = room.starter;
     room.round = 1;
@@ -130,6 +168,21 @@ export function act(room, seat, action) {
     return;
   }
   if (room.stage === 'win') {
+    if(action.type==='prepare-rematch'){
+      if(seat!==room.host)throw Error('Only the host can manage the next match.');
+      me.rematchReady=true;return act(room,seat,{type:'lobby'});
+    }
+    if(action.type==='rematch-ready'){
+      me.rematchReady=true;
+      if(room.seats.length>=3&&room.seats.every(p=>p.connected&&(p.bot||p.rematchReady))){room.seats.forEach(p=>{p.ready=true});return act(room,room.host,{type:'rematch'});}
+      return;
+    }
+    if (action.type === 'lobby' && seat === room.host) {
+      room.stage = 'lobby'; room.seats.forEach(s => { s.ready = !!s.bot || !!s.rematchReady; s.hand.push(...s.stack); s.stack = []; s.bid = 0; });
+      room.bid = 0; room.leader = -1; room.flips = []; room.discarded = null;
+      room.last = 'Back in the lobby. Invite friends or ready up for another match.';
+      return;
+    }
     if (action.type !== 'rematch' || seat !== room.host) throw Error('Only the host can start a rematch.');
     room.stage = 'lobby';
     try { return act(room, seat, { type: 'start' }); }
@@ -158,7 +211,7 @@ export function act(room, seat, action) {
     room.starter = room.challenger;
     if (!cards.length) {
       room.last += ` ${loser.name} is out.`;
-      if (alive(room).length === 1) { room.winner = alive(room)[0]; room.resultKind = 'elimination'; room.stage = 'win'; return; }
+      if (alive(room).length === 1) { crownWinner(room,alive(room)[0],'elimination'); return; }
       if (room.skullOwner === room.challenger) { room.stage = 'choose-lead'; return; }
       room.starter = room.skullOwner;
     }
@@ -188,6 +241,7 @@ export function act(room, seat, action) {
     if (action.type === 'bid') {
       if (!Number.isInteger(action.amount) || action.amount <= room.bid || action.amount > total(room)) throw Error('Bid above the current bid, up to the discs in play.');
       room.bid = action.amount;
+      me.bid = action.amount;
       room.leader = seat;
       room.stage = 'bid';
       if (room.bid === total(room)) finishBid(room);
@@ -224,7 +278,7 @@ export function act(room, seat, action) {
       me.wins++;
       room.last = `${me.name} found every flower!`;
       room.resultKind = 'flower';
-      if (me.wins === 2) { room.winner = seat; room.stage = 'win'; }
+      if (me.wins === 2) { crownWinner(room,seat); }
       else { room.starter = seat; room.stage = 'result'; }
     }
     return;
@@ -234,10 +288,10 @@ export function act(room, seat, action) {
 // Removing a seated player restarts an unfinished round so no bid references a missing seat.
 export function removePlayer(room, seat) {
   const playing = !['lobby', 'win'].includes(room.stage);
-  room.seats.forEach(s => { s.hand.push(...s.stack); s.stack = []; });
+  room.seats.forEach(s => { s.hand.push(...s.stack); s.stack = []; s.bid = 0; });
   const name = room.seats[seat].name;
   room.seats.splice(seat, 1);
-  room.host = room.host === seat ? room.seats.findIndex(s => s.connected) : room.host - (seat < room.host ? 1 : 0);
+  room.host = room.host === seat ? room.seats.findIndex(s => s.connected && !s.bot) : room.host - (seat < room.host ? 1 : 0);
   if (room.host < 0) room.host = 0;
   room.starter = room.host; room.turn = room.host;
   room.placed = 0; room.bid = 0; room.leader = -1; room.passed = [];
@@ -247,7 +301,7 @@ export function removePlayer(room, seat) {
   if (playing) {
     room.round++;
     const remaining = alive(room);
-    if (remaining.length === 1) { room.winner = remaining[0]; room.resultKind = 'elimination'; room.stage = 'win'; }
+    if (remaining.length === 1) { crownWinner(room,remaining[0],'elimination'); }
     else if (room.seats.filter(s => s.connected && s.hand.length).length < 2) { room.pausedStage = 'place'; room.stage = 'paused'; }
     else if (!room.seats[room.turn]?.hand.length) room.turn = room.starter = next(room, room.host);
   }
@@ -264,6 +318,6 @@ export function view(room, seat) {
     last: room.last, winner: room.winner, votes: room.votes, seat,
     hand: mine.hand, stack: mine.stack,
     total: total(room),
-    seats: room.seats.map(s => ({ name: s.name, connected: s.connected, discs: s.hand.length + s.stack.length, stack: s.stack.length, wins: s.wins }))
+    seats: room.seats.map(s => ({ id:s.id||(s.id=id(16)), name: s.name, bot: !!s.bot, connected: s.connected, ready: !!s.ready, rematchReady: !!s.rematchReady, discs: s.hand.length + s.stack.length, stack: s.stack.length, bid: s.bid || 0, wins: s.wins, sessionWins:s.sessionWins||0 }))
   };
 }

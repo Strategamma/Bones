@@ -1,5 +1,7 @@
-Goal: improve the shared-table feel, visual hierarchy, readable navigation and card size.
-Scope: existing canvas/DOM UI; preserve game rules and room flows.
-Approach: one illustrated felt table with colored seat markers, stronger primary action prompts, larger responsive cards and captions.
-Risks: six-player short-phone clearance and private/public card distinction.
-Verification: 27 tests and production build pass; browser six-player placement/bidding, safe/opponent-skull/discard and narrow/short-phone screenshots. Native card targets stay at least56×64 physical pixels. Changes remain local.
+Goal: simplify victory and support consensual rematches plus host seat management.
+Scope: winner-only layout/Home; rematch opt-ins/count; lobby empty-seat bots and confirmed kicks.
+Approach: capability-gated client controls and authoritative per-seat rematch flags; preserve legacy host rematch compatibility.
+Risks: duplicated votes, disconnected seats, seat reindexing, narrow-phone overlap.
+Verification: full suite, vote/partial-lobby regressions, browser winner/guest CTA and bot add/cancel/confirmed removal.
+
+Status: implemented; 50 tests/build pass. Browser verified winner/guest flow, host Manage Seats, real local bot fill/removal confirmation, and narrow-phone spacing. Public server needs update for opt-in protocol.

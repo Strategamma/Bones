@@ -3,7 +3,8 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, extname, resolve, dirname } from 'node:path';
 import { WebSocketServer, WebSocket } from 'ws';
-import { makeRoom, newRoomCode, joinRoom, seatForToken, connection, act, view, removePlayer } from './game.js';
+import { makeRoom, newRoomCode, joinRoom, seatForToken, connection, act, view, removePlayer, addBot, automaticAction } from './game.js';
+import { botAction } from './bot.js';
 import { lanAddress, LAN_NAME, startLanDiscovery } from './lan-discovery.js';
 
 const port = Number(process.env.PORT || 10000);
@@ -18,7 +19,7 @@ if (dataFile && existsSync(dataFile)) {
   try {
     const saved = JSON.parse(await readFile(dataFile, 'utf8'));
     for (const room of saved) {
-      room.seats.forEach(s => { s.connected = false; });
+      room.seats.forEach(s => { s.connected = !!s.bot; s.ready = room.stage === 'lobby' ? !!s.bot : s.ready ?? true; });
       if (!['lobby', 'win', 'paused'].includes(room.stage)) { room.pausedStage = room.stage; room.stage = 'paused'; room.votes = []; }
       rooms.set(room.code, room);
     }
@@ -38,7 +39,24 @@ function persist() {
   saveQueue.catch(error => console.error('Unable to save rooms:', error));
 }
 function send(socket, data) { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(data)); }
+const botTimers = new Map();
+function scheduleBot(room) {
+  clearTimeout(botTimers.get(room));
+  botTimers.delete(room);
+  if (!room.seats.some(s => s.connected && !s.bot)) return;
+  const automatic=automaticAction(room);
+  const seat = automatic?.seat ?? room.seats.findIndex((s, i) => s.bot && botAction(view(room, i), () => .5));
+  if (seat < 0) return;
+  botTimers.set(room, setTimeout(() => {
+    botTimers.delete(room);
+    if (!room.seats.some(s => s.connected && !s.bot)) return;
+    const pending=automaticAction(room);
+    const action = pending?.action || (room.seats[seat]?.bot?botAction(view(room, seat)):null);
+    if (action) { act(room, pending?.seat??seat, action); broadcast(room); }
+  }, automatic ? room.stage==='reveal'&&!room.flips.length?1700:1300 : 700));
+}
 function broadcast(room) {
+  scheduleBot(room);
   for (let i = 0; i < room.seats.length; i++) {
     const socket = peers.get(`${room.code}:${i}`);
     if (socket) send(socket, { type: 'state', state: view(room, i) });
@@ -62,7 +80,7 @@ const server = createServer(async (req, res) => {
 });
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 4096 });
 function roomList() {
-  return [...rooms.values()].filter(room => room.mode === mode && room.seats.some(s => s.connected)).map(room => ({
+  return [...rooms.values()].filter(room => room.mode === mode && room.seats.some(s => s.connected && !s.bot)).map(room => ({
     code: room.code, host: room.seats[room.host]?.name || 'Friends',
     players: room.seats.length, connected: room.seats.filter(s => s.connected).length, capacity: 6,
     status: room.stage === 'lobby' ? 'waiting' : room.stage === 'win' ? 'finished' : room.stage === 'paused' ? 'paused' : 'playing',
@@ -85,13 +103,15 @@ function removeSeat(room, target) {
   broadcast(room);
 }
 wss.on('connection', socket => {
+  socket.isAlive = true;
+  socket.on('pong', () => { socket.isAlive = true; });
   let membership = null;
   socket.on('message', raw => {
     try {
       const msg = JSON.parse(String(raw));
       if (!msg || typeof msg !== 'object') throw Error('Invalid request.');
       if (msg.type === 'ping') { send(socket, { type: 'pong' }); return; }
-      if (msg.type === 'hello') { send(socket, { type: 'hello', mode }); return; }
+      if (msg.type === 'hello') { const address = mode === 'lan' ? lanAddress() : ''; send(socket, { type: 'hello', mode, features:{automaticReveal:true,rematchVotes:true,readiness:true,bots:true,pause:true,returnLobby:true,simultaneousPlacement:true}, ...(address ? {lanUrl:`http://${address}:${port}`} : {}) }); return; }
       if (msg.type === 'list-rooms') {
         if (mode !== 'lan') throw Error('Room discovery is available on LAN only.');
         socket.roomDirectory = true;
@@ -117,7 +137,7 @@ wss.on('connection', socket => {
           const prior = peers.get(`${room.code}:${seat}`);
           if (prior && prior !== socket) prior.close(4001, 'Seat opened elsewhere');
         } else {
-          room = [...rooms.values()].find(r => r.mode === mode && r.stage === 'lobby' && r.seats.length < 6 && r.seats.some(s => s.connected));
+          room = [...rooms.values()].find(r => r.mode === mode && r.stage === 'lobby' && r.seats.length < 6 && r.seats.some(s => s.connected && !s.bot));
           if (room) seat = joinRoom(room, msg.name || `Player ${room.seats.length + 1}`);
           else {
             ({ room, seat } = makeRoom(mode, msg.name || 'Player 1'));
@@ -175,10 +195,15 @@ wss.on('connection', socket => {
       }
       if (msg.type === 'action') {
         if (!membership || peers.get(`${membership.room.code}:${membership.seat}`) !== socket) throw Error('Join a table first.');
+        if (msg.action?.type === 'add-bot') {
+          addBot(membership.room, membership.seat);
+          broadcast(membership.room); return;
+        }
         if (msg.action?.type === 'kick') {
           const { room, seat } = membership, target = msg.action.target;
           if (seat !== room.host) throw Error('Only the host can remove a player.');
           if (!Number.isInteger(target) || target < 0 || target >= room.seats.length || target === seat) throw Error('Choose another player.');
+          if(msg.action.playerId&&room.seats[target].id!==msg.action.playerId)throw Error('That seat changed. Select the player again.');
           const removed = peers.get(`${room.code}:${target}`);
           if (removed) { send(removed, { type: 'kicked' }); removed.membership.kicked = true; removed.close(4003, 'Removed by host'); }
           removeSeat(room, target);
@@ -201,6 +226,15 @@ wss.on('connection', socket => {
     broadcast(room);
   });
 });
+// Browser sockets answer protocol pings automatically, including when the page is idle.
+const heartbeat = setInterval(() => {
+  for (const socket of wss.clients) {
+    if (!socket.isAlive) { socket.terminate(); continue; }
+    socket.isAlive = false; socket.ping();
+  }
+}, Math.max(100, Number(process.env.WS_HEARTBEAT_MS) || 15000));
+heartbeat.unref();
+wss.on('close', () => clearInterval(heartbeat));
 server.listen(port, '0.0.0.0', () => {
   console.log(`Skull ${mode} table on 0.0.0.0:${server.address().port}`);
   if (mode === 'lan') {

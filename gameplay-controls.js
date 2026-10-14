@@ -7,7 +7,7 @@ bids.innerHTML = '<p></p><div class="bid-numbers"></div>';
 document.body.append(bids);
 let bidKey = '';
 export function hideBids() { bids.hidden = true; }
-export function showBids({x,y,w,min,max,height=96}) {
+export function showBids({x,y,w,min,max,height=96,bottomAlign=false}) {
   const canvas = document.querySelector('#game'), rect = canvas.getBoundingClientRect(), scale = rect.width / 390;
   const columns = rect.width < 350 ? 5 : 6;
   bids.style.setProperty('--bid-columns',columns);
@@ -24,14 +24,16 @@ export function showBids({x,y,w,min,max,height=96}) {
     }
     grid.scrollLeft = 0;
   }
-  for (const button of bids.querySelectorAll('button')) button.disabled = net.pendingAction || !net.connected;
-  return {bottom:y+bids.getBoundingClientRect().height/scale,scale};
+  for (const button of bids.querySelectorAll('button')) button.disabled = net.pendingAction || net.connecting || !net.connected;
+  const renderedHeight=bids.getBoundingClientRect().height;
+  if(bottomAlign){y=Math.max(y,(rect.height-renderedHeight-16)/scale);bids.style.top=`${rect.top+y*scale}px`;}
+  return {bottom:y+renderedHeight/scale,scale};
 }
-export function syncGameplayControls() { const s=net.state,turn=s?.turn===s?.seat; if(!turn||!['add','bid'].includes(s?.stage))hideBids(); if(s?.stage!=='reveal')tables.hidden=true; if(s?.stage!=='reveal'||!turn)confirm.hidden=true; }
+export function syncGameplayControls() { const s=net.state,turn=s?.turn===s?.seat; if(!turn||!['add','bid'].includes(s?.stage))hideBids(); if(s?.stage!=='reveal')tables.hidden=true; if(s?.stage!=='reveal'||!turn||net.features?.automaticReveal&&s.seats[s.challenger]?.stack>s.flips.filter(f=>f.owner===s.challenger).length)confirm.hidden=true; }
 
 const tables = document.createElement('div'); tables.id='table-cards'; tables.hidden=true; document.body.append(tables);
 let tablesKey='';
-export function showTableCards({state,selected,onSelect,startY,rowH,flipAge,reducedMotion,busy,announcing}) {
+export function showTableCards({automaticOwn=false,state,selected,onSelect,startY,rowH,flipAge,reducedMotion,busy,announcing}) {
   const canvas=document.querySelector('#game'),rect=canvas.getBoundingClientRect(),scale=rect.width/390;
   tables.hidden=false;tables.style.visibility=announcing?'hidden':'visible';
   const key=JSON.stringify([state.code,state.round,state.turn,state.challenger,state.flips,state.seats.map(p=>[p.name,p.stack])]);
@@ -42,7 +44,7 @@ export function showTableCards({state,selected,onSelect,startY,rowH,flipAge,redu
       const strip=document.createElement('div');strip.className='played-cards';strip.dataset.seat=seat;strip.setAttribute('role','group');strip.setAttribute('aria-label',`${player.name}'s played cards`);
       for(let index=0;index<player.stack;index++){
         const button=document.createElement('button');button.dataset.index=index;
-        button.innerHTML='<img alt=""><span></span>';button.onclick=()=>onSelect({target:seat,index});strip.append(button);
+        button.innerHTML='<img alt="" draggable="false"><span></span>';button.onclick=()=>onSelect({target:seat,index});strip.append(button);
       }
       tables.append(strip);
     });
@@ -50,20 +52,20 @@ export function showTableCards({state,selected,onSelect,startY,rowH,flipAge,redu
   const names=['coral','mint','amber','violet','blue','orchid'];
   for(const strip of tables.children){
     const seat=Number(strip.dataset.seat),player=state.seats[seat];
-    Object.assign(strip.style,{left:`${rect.left+(28+seat%2*183)*scale}px`,top:`${rect.top+(startY+Math.floor(seat/2)*rowH+26)*scale}px`,width:`${152*scale}px`,height:`${Math.max(74,(rowH-28)*scale)}px`});
-    const cardH=Math.max(64,Math.min(92,(rowH-50)*scale));strip.style.setProperty('--played-height',`${cardH}px`);strip.style.setProperty('--played-width',`${Math.max(56,cardH*.76)}px`);
+    Object.assign(strip.style,{left:`${rect.left+(28+seat%2*183)*scale}px`,top:`${rect.top+(startY+Math.floor(seat/2)*rowH+64)*scale}px`,width:`${152*scale}px`,height:`${Math.max(74,(rowH-78)*scale)}px`});
+    const cardH=Math.max(64,Math.min(92,(rowH-90)*scale));strip.style.setProperty('--played-height',`${cardH}px`);strip.style.setProperty('--played-width',`${Math.max(56,cardH*.76)}px`);
     for(const button of strip.children){
       const index=Number(button.dataset.index),opened=state.flips.find(f=>f.owner===seat&&f.index===index),active=selected?.target===seat&&selected.index===index;
       button.dataset.opened=String(!!opened);
-      button.disabled=!!opened||state.turn!==state.seat||(seat!==state.challenger&&ownLeft>0)||net.pendingAction||!net.connected||busy;
+      button.disabled=automaticOwn&&ownLeft>0||!!opened||state.turn!==state.seat||(seat!==state.challenger&&ownLeft>0)||net.pendingAction||net.connecting||!net.connected||busy;
       button.setAttribute('aria-pressed',String(active));button.setAttribute('aria-label',opened?`${player.name} card ${index+1}: ${opened.disc}`:`Select ${player.name} card ${index+1}${index===0?' (bottom)':index===player.stack-1?' (top)':''}`);
       button.style.setProperty('--seat-color',`var(--card-${names[seat]})`);
-      const progress=opened===state.flips.at(-1)&&flipAge<.55&&!reducedMotion?Math.max(0,flipAge/.55):1;
-      const face=opened&&progress>=.5?opened.disc:null,img=button.querySelector('img');
+      const progress=opened===state.flips.at(-1)&&flipAge<.72&&!reducedMotion?Math.max(0,flipAge/.72):1,eased=progress*progress*(3-2*progress);
+      const face=opened&&eased>=.5?opened.disc:null,img=button.querySelector('img');
       const src=`${import.meta.env.BASE_URL}assets/${face?`card-${face}-new`:`card-played-${names[seat]}`}.svg`;
       if(img.getAttribute('src')!==src)img.src=src;
-      img.style.transform=`scaleX(${progress<1?Math.max(.04,Math.abs(Math.cos(Math.PI*progress))):1})`;
-      button.querySelector('span').textContent=opened?(opened.disc==='flower'?'SAFE':'SKULL'):index===0?'BOTTOM':index===player.stack-1?'TOP':`CARD ${index+1}`;
+      img.style.transform=`scaleX(${progress<1?Math.max(.025,Math.abs(Math.cos(Math.PI*eased))):1})`;
+      button.querySelector('span').textContent=opened?(progress<1?'OPENING':opened.disc==='flower'?'SAFE':'SKULL'):index===0?'BOTTOM':index===player.stack-1?'TOP':`CARD ${index+1}`;
     }
   }
 }
@@ -71,5 +73,5 @@ const confirm = document.createElement('button');confirm.id='reveal-confirm';con
 export function showRevealConfirm({x,y,w,h,choice,onConfirm,disabled,announcing}) {
   const rect=document.querySelector('#game').getBoundingClientRect(),scale=rect.width/390;
   Object.assign(confirm.style,{left:`${rect.left+x*scale}px`,top:`${rect.top+y*scale}px`,width:`${w*scale}px`,height:`${Math.max(44,h*scale)}px`});
-  confirm.hidden=false;confirm.style.visibility=announcing?'hidden':'visible';confirm.disabled=!choice||disabled;confirm.textContent=choice?'REVEAL SELECTED CARD':'TAP A CARD TO SELECT';confirm.onclick=onConfirm;
+  confirm.hidden=!choice;confirm.style.visibility=announcing?'hidden':'visible';confirm.disabled=!choice||disabled||net.connecting||net.pendingAction||!net.connected;confirm.textContent=choice?'REVEAL SELECTED CARD':'TAP A CARD TO SELECT';confirm.onclick=onConfirm;
 }

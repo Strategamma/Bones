@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { makeRoom, newRoomCode, joinRoom, connection, act, view, removePlayer } from '../server/game.js';
+import { makeRoom, newRoomCode, joinRoom, connection, act, view, removePlayer, automaticAction } from '../server/game.js';
 
 test('new table codes avoid lookalike characters', () => {
   for (let i = 0; i < 100; i++) assert.match(newRoomCode(), /^[A-HJ-NP-Z2-9]{6}$/);
@@ -9,7 +9,7 @@ test('new table codes avoid lookalike characters', () => {
 function table() {
   const { room } = makeRoom('lan', 'Ada');
   joinRoom(room, 'Bo'); joinRoom(room, 'Cy');
-  room.seats.forEach((_, i) => connection(room, i, true));
+  room.seats.forEach((_, i) => {connection(room, i, true);act(room,i,{type:"ready",ready:true});});
   act(room, 0, { type: 'start' });
   return room;
 }
@@ -206,7 +206,7 @@ test('direct card selection accepts unopened indices and rejects repeats and inv
 
 test('continuing an auction skips players who already passed', () => {
   const room = table();
-  room.stage = 'lobby'; joinRoom(room, 'Dee'); connection(room, 3, true); act(room, 0, {type:'start'});
+  room.stage = 'lobby'; joinRoom(room, 'Dee'); connection(room, 3, true);act(room,3,{type:'ready',ready:true}); act(room, 0, {type:'start'});
   for (let i = 0; i < 4; i++) act(room, i, {type:'place', index:0});
   act(room, 0, {type:'bid', amount:1});
   act(room, 1, {type:'pass'});
@@ -222,7 +222,7 @@ test('continuing an auction skips players who already passed', () => {
 test('continuing an auction retains clockwise order among eligible bidders', () => {
   const room = table(); room.stage = 'lobby';
   joinRoom(room, 'Dee'); joinRoom(room, 'Eve');
-  connection(room, 3, true); connection(room, 4, true); act(room, 0, {type:'start'});
+  connection(room, 3, true); connection(room, 4, true);act(room,3,{type:'ready',ready:true});act(room,4,{type:'ready',ready:true}); act(room, 0, {type:'start'});
   for (let i = 0; i < 5; i++) act(room, i, {type:'place', index:0});
   act(room, 0, {type:'bid', amount:1}); act(room, 1, {type:'pass'});
   act(room, 2, {type:'bid', amount:2}); act(room, 3, {type:'pass'}); act(room, 4, {type:'bid', amount:3});
@@ -239,4 +239,42 @@ test('an eliminated host disconnecting between rounds permits host migration', (
   act(room, 1, {type:'continue'}); act(room, 2, {type:'continue'});
   assert.equal(room.host, 1); assert.equal(room.stage, 'result');
   act(room, 1, {type:'next'}); assert.equal(room.stage, 'place');
+});
+
+test('rematch opt-ins are counted once and all humans must consent',()=>{const room=table();room.stage='win';room.winner=0;room.seats[0].wins=2;act(room,1,{type:'rematch-ready'});act(room,1,{type:'rematch-ready'});assert.equal(view(room,0).seats.filter(p=>p.rematchReady).length,1);act(room,0,{type:'rematch-ready'});assert.equal(room.stage,'win');act(room,2,{type:'rematch-ready'});assert.equal(room.stage,'place');assert.ok(room.seats.every(p=>!p.rematchReady&&p.wins===0));});
+test('partial rematch votes survive seat management',()=>{const room=table();room.stage='win';act(room,1,{type:'rematch-ready'});act(room,0,{type:'lobby'});assert.equal(room.stage,'lobby');assert.equal(room.seats[1].ready,true);assert.equal(room.seats[2].ready,false);assert.throws(()=>act(room,1,{type:'start'}),/host/);});
+test('offline seats prevent automatic rematch',()=>{const room=table();room.stage='win';connection(room,2,false);act(room,0,{type:'rematch-ready'});act(room,1,{type:'rematch-ready'});assert.equal(room.stage,'win');assert.throws(()=>act(room,2,{type:'rematch-ready'}),/Reconnect/);});
+test('guests must explicitly ready before host starts',()=>{const {room}=makeRoom('lan','A');joinRoom(room,'B');joinRoom(room,'C');room.seats.forEach((_,i)=>connection(room,i,true));assert.throws(()=>act(room,0,{type:'start'}),/READY/);act(room,1,{type:'ready',ready:true});act(room,2,{type:'ready',ready:true});act(room,0,{type:'start'});assert.equal(room.stage,'place');});
+test('disconnect resets lobby readiness',()=>{const room=table();room.stage='lobby';connection(room,1,false);assert.equal(room.seats[1].ready,false);connection(room,1,true);assert.equal(room.seats[1].ready,false);});
+test('shared pause requires connected player consensus',()=>{const room=table();act(room,0,{type:'pause'});assert.equal(room.stage,'paused');act(room,0,{type:'continue'});act(room,1,{type:'continue'});assert.equal(room.stage,'paused');act(room,2,{type:'continue'});assert.equal(room.stage,'place');});
+test('victory lobby keeps identities and scores but resets cards/readiness',()=>{const room=table();room.stage='win';room.seats[0].wins=2;const tokens=room.seats.map(p=>p.token);act(room,0,{type:'lobby'});assert.equal(room.stage,'lobby');assert.deepEqual(room.seats.map(p=>p.token),tokens);assert.equal(room.seats[0].wins,2);assert.ok(room.seats.every(p=>!p.ready&&p.stack.length===0));});
+
+test('host rematch immediately opens seat management and preserves existing votes',()=>{const room=table();room.stage='win';room.seats[0].wins=2;act(room,1,{type:'rematch-ready'});assert.throws(()=>act(room,2,{type:'prepare-rematch'}),/host/);act(room,0,{type:'prepare-rematch'});assert.equal(room.stage,'lobby');assert.deepEqual(room.seats.map(p=>p.ready),[true,true,false]);assert.equal(room.seats[0].wins,2);assert.throws(()=>act(room,0,{type:'start'}),/READY/);act(room,2,{type:'ready',ready:true});act(room,0,{type:'start'});assert.equal(room.stage,'place');assert.ok(room.seats.every(p=>p.wins===0));});
+
+test('session flowers count match wins and survive lobby and rematch',()=>{
+ const room=table();
+ for(let match=0;match<2;match++){
+  for(let round=0;round<2;round++){flowers(room);oneBid(room);act(room,0,{type:'flip',target:0});if(!round)act(room,0,{type:'next'});}
+  assert.equal(view(room,1).seats[0].sessionWins,match+1);
+  act(room,0,{type:'prepare-rematch'});assert.equal(room.seats[0].sessionWins,match+1);
+  for(const seat of [1,2])act(room,seat,{type:'ready',ready:true});act(room,0,{type:'start'});
+  assert.equal(room.seats[0].wins,0);assert.equal(room.seats[0].sessionWins,match+1);
+ }
+});
+test('last-player-standing earns one session flower without awarding round points',()=>{
+ const room=table();room.seats[1].hand=[];room.seats[2].hand=[];room.stage='add';removePlayer(room,2);
+ assert.equal(room.stage,'win');assert.equal(room.winner,0);assert.equal(room.seats[0].sessionWins,1);assert.equal(room.seats[0].wins,0);
+ act(room,0,{type:'rematch-ready'});assert.equal(room.seats[0].sessionWins,1);
+});
+
+test('public player identities survive seat reindexing without exposing resume tokens',()=>{const room=table(),before=view(room,0),id=before.seats[2].id;assert.ok(id);assert.notEqual(id,room.seats[2].token);assert.equal(new Set(before.seats.map(p=>p.id)).size,3);removePlayer(room,1);assert.equal(view(room,0).seats[1].id,id);});
+
+test('automatic opening reveals only own top cards and stops before opponent choices',()=>{
+ const room=table();flowers(room);act(room,0,{type:'place',disc:'flower'});act(room,1,{type:'place',disc:'flower'});act(room,2,{type:'place',disc:'flower'});act(room,0,{type:'bid',amount:3});act(room,1,{type:'pass'});act(room,2,{type:'pass'});
+ for(const index of [1,0]){const pending=automaticAction(room);assert.equal(pending.seat,0);assert.equal(pending.action.index,index);act(room,pending.seat,pending.action);}
+ assert.equal(room.stage,'reveal');assert.equal(room.remaining,1);assert.equal(automaticAction(room),null);
+});
+test('automatic skull discard removes one random hidden card and stops in results',()=>{
+ const room=table();act(room,0,{type:'place',disc:'skull'});act(room,1,{type:'place',disc:'flower'});act(room,2,{type:'place',disc:'flower'});oneBid(room);
+ let pending=automaticAction(room);act(room,pending.seat,pending.action);assert.equal(room.stage,'loss');pending=automaticAction(room);act(room,pending.seat,pending.action);assert.equal(room.stage,'result');assert.equal(room.seats[0].hand.length,3);assert.equal(room.discarded.owner,0);assert.equal(automaticAction(room),null);
 });

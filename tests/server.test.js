@@ -45,6 +45,7 @@ test('LAN transport creates, joins, resumes, and keeps hands private', async t =
   c.send({ type: 'join', code: joinedA.code, name: 'Cy' });
   await c.next('joined');
   await a.next('state'); await b.next('state'); await c.next('state');
+  for (const guest of [b,c]) { guest.send({type:'action',action:{type:'ready',ready:true}}); await a.next('state'); await b.next('state'); await c.next('state'); }
   a.send({ type: 'action', action: { type: 'start' } });
   await a.next('state'); await b.next('state'); await c.next('state');
   a.send({ type: 'action', action: { type: 'place', disc: 'skull' } });
@@ -142,6 +143,7 @@ test('LAN auto seating, live directory, capacity, explicit rooms and active remo
   assert.notEqual(extraSeat.code,tokens[6].code);
   assert.equal((await watcher.next('rooms')).rooms.length,3);
   // Consume queued lobby broadcasts before asserting the game transition.
+  for (const guest of seated.slice(1,6)) { guest.send({type:'action',action:{type:'ready',ready:true}}); await watcher.next('rooms'); }
   seated[0].send({type:'action',action:{type:'start'}});
   assert.equal((await watcher.next('rooms')).rooms[0].status,'playing');
   for (;;) { if ((await seated[0].next('state')).state.stage==='place') break; }
@@ -168,4 +170,92 @@ test('LAN auto seating, live directory, capacity, explicit rooms and active remo
   const resumed = await open(); resumed.send({type:'auto-join',code:tokens[0].code,token:tokens[0].token});
   assert.equal((await resumed.next('joined')).token,tokens[0].token);
   assert.equal((await resumed.next('state')).state.seat,0);
+});
+
+for (const mode of ['lan', 'internet']) test(`${mode} hosts add, start and remove paced server bots`, async t => {
+  const port = await freePort();
+  const server = spawn(process.execPath, ['server/index.js'], {env:{...process.env, PORT:String(port), TABLE_MODE:mode, DATA_FILE:'', DISABLE_LAN_DISCOVERY:'1'}, stdio:'ignore'});
+  t.after(()=>server.kill());
+  for(let i=0;i<30;i++) {try {if((await fetch(`http://127.0.0.1:${port}/health`)).ok) break;} catch {} await new Promise(r=>setTimeout(r,50));}
+  const host=await client(`ws://127.0.0.1:${port}/ws`); t.after(()=>host.close());
+  host.send({type:'create',name:'Human'}); await host.next('joined'); await host.next('state');
+  let botId;
+  for(let i=0;i<2;i++) {
+    host.send({type:'action',action:{type:'add-bot'}});
+    const s=(await host.next('state')).state;
+    assert.equal(s.seats.length,i+2); assert.equal(s.seats.at(-1).bot,true);
+    assert.equal(s.seats.at(-1).hand,undefined);if(i===0)botId=s.seats[1].id;
+  }
+  host.send({type:'action',action:{type:'kick',target:1,playerId:'stale-player-id'}});assert.match((await host.next('error')).message,/seat changed/);
+  host.send({type:'action',action:{type:'start'}}); assert.equal((await host.next('state')).state.stage,'place');
+  host.send({type:'action',action:{type:'place',disc:'flower'}}); await host.next('state');
+  let s;
+  for(let i=0;i<2;i++) s=(await host.next('state')).state;
+  assert.equal(s.stage,'add'); assert.equal(s.total,3);
+  host.send({type:'action',action:{type:'kick',target:1,playerId:botId}});
+  s=(await host.next('state')).state; assert.equal(s.seats.length,2); assert.equal(s.round,2);
+  s=(await host.next('state')).state; assert.equal(s.seats[1].stack,1);
+  host.send({type:'action',action:{type:'add-bot'}}); assert.match((await host.next('error')).message,/started/);
+});
+
+test('independent LAN clients synchronize readiness, complete matches and return together', async t => {
+ const port=await freePort();
+ const server=spawn(process.execPath,['server/index.js'],{env:{...process.env,PORT:String(port),TABLE_MODE:'lan',DATA_FILE:'',DISABLE_LAN_DISCOVERY:'1'},stdio:'ignore'});
+ t.after(()=>server.kill());
+ for(let i=0;i<30;i++){try{if((await fetch(`http://127.0.0.1:${port}/health`)).ok)break;}catch{}await new Promise(r=>setTimeout(r,50));}
+ const players=await Promise.all([0,1,2].map(()=>client(`ws://127.0.0.1:${port}/ws`)));t.after(()=>players.forEach(p=>p.close()));
+ players[0].send({type:'hello'});const hello=await players[0].next('hello');assert.equal(hello.mode,'lan');if(hello.lanUrl)assert.match(hello.lanUrl,/^http:\/\//);
+ players[0].send({type:'create',name:'Host'});const joined=await players[0].next('joined');await players[0].next('state');
+ for(let i=1;i<3;i++){players[i].send({type:'join',code:joined.code,name:`Guest ${i}`});await players[i].next('joined');for(let j=0;j<=i;j++)await players[j].next('state');}
+ const outsider=await client(`ws://127.0.0.1:${port}/ws`);t.after(()=>outsider.close());outsider.send({type:'join',code:'ZZZZZZ',name:'Lost'});assert.match((await outsider.next('error')).message,/found|code/i);
+ players[0].send({type:'action',action:{type:'start'}});assert.match((await players[0].next('error')).message,/READY/);
+ let snapshots;
+ const action=async(seat,move)=>{players[seat].send({type:'action',action:move});snapshots=await Promise.all(players.map(async p=>(await p.next('state')).state));return snapshots[0];};
+ for(let i=1;i<3;i++)await action(i,{type:'ready',ready:true});
+ await action(0,{type:'start'});
+ players[0].send({type:'action',action:{type:'start'}});assert.match((await players[0].next('error')).message,/Place/);
+ for(let round=0;round<2;round++){
+  for(let i=0;i<3;i++)await action(i,{type:'place',disc:'flower'});
+  await action(0,{type:'bid',amount:1});await action(1,{type:'pass'});await action(2,{type:'pass'});
+  const s=await action(0,{type:'flip',target:0});assert.equal(s.seats[0].wins,round+1);
+  assert.ok(snapshots.every(v=>v.stage===s.stage&&v.seats[0].wins===s.seats[0].wins));
+  if(!round)await action(0,{type:'next'});
+ }
+ assert.equal(snapshots[0].stage,'win');await action(0,{type:'lobby'});assert.equal(snapshots[1].stage,'lobby');assert.equal(snapshots[1].seats[0].wins,2);assert.ok(snapshots[1].seats.every(p=>!p.ready));for(const i of [1,2])await action(i,{type:'ready',ready:true});await action(0,{type:'start'});assert.equal(snapshots[1].stage,'place');
+ players[0].close();for(const p of players.slice(1))assert.equal((await p.next('state')).state.stage,'paused');
+ for(const i of [1,2]){players[i].send({type:'action',action:{type:'continue'}});for(const p of players.slice(1))await p.next('state');}
+ players[1].send({type:'action',action:{type:'kick',target:0}});
+ for(const p of players.slice(1)){const s=(await p.next('state')).state;assert.equal(s.host,0);assert.equal(s.seats[0].name,'Guest 1');assert.equal(s.seats.length,2);}
+});
+
+test('silent transport loss closes an unresponsive socket and migrates lobby hosting', async t=>{
+ const port=await freePort();
+ const server=spawn(process.execPath,['server/index.js'],{env:{...process.env,PORT:String(port),TABLE_MODE:'lan',DATA_FILE:'',DISABLE_LAN_DISCOVERY:'1',WS_HEARTBEAT_MS:'200'},stdio:'ignore'});t.after(()=>server.kill());
+ for(let i=0;i<30;i++){try{if((await fetch(`http://127.0.0.1:${port}/health`)).ok)break;}catch{}await new Promise(r=>setTimeout(r,50));}
+ const stalled=new WebSocket(`ws://127.0.0.1:${port}/ws`,{autoPong:false});t.after(()=>stalled.close());
+ await new Promise((resolve,reject)=>{stalled.once('open',resolve);stalled.once('error',reject)});
+ const joined=new Promise(resolve=>stalled.on('message',raw=>{const m=JSON.parse(String(raw));if(m.type==='joined')resolve(m)}));
+ stalled.send(JSON.stringify({type:'create',name:'Silent host'}));const seat=await joined;
+ const guest=await client(`ws://127.0.0.1:${port}/ws`);t.after(()=>guest.close());guest.send({type:'join',code:seat.code,name:'Connected guest'});await guest.next('joined');await guest.next('state');
+ const s=(await guest.next('state')).state;assert.equal(s.seats[0].connected,false);assert.equal(s.host,1);
+ guest.send({type:'ping'});await guest.next('pong');
+});
+
+test('human bid wins auto-open and random-discard in synchronized independent clients',async t=>{
+ const port=await freePort(),server=spawn(process.execPath,['server/index.js'],{env:{...process.env,PORT:String(port),DATA_FILE:'',DISABLE_LAN_DISCOVERY:'1'},stdio:'ignore'});t.after(()=>server.kill());
+ for(let i=0;i<30;i++){try{if((await fetch(`http://127.0.0.1:${port}/health`)).ok)break;}catch{}await new Promise(r=>setTimeout(r,50));}
+ const players=await Promise.all([0,1,2].map(()=>client(`ws://127.0.0.1:${port}/ws`)));t.after(()=>players.forEach(p=>p.close()));
+ players[0].send({type:'create',name:'Host'});const joined=await players[0].next('joined');await players[0].next('state');
+ for(let i=1;i<3;i++){players[i].send({type:'join',code:joined.code,name:'Guest '+i});await players[i].next('joined');for(let j=0;j<=i;j++)await players[j].next('state');}
+ const states=()=>Promise.all(players.map(async p=>(await p.next('state')).state));
+ const move=async(seat,action)=>{players[seat].send({type:'action',action});return states()};
+ await move(1,{type:'ready',ready:true});await move(2,{type:'ready',ready:true});await move(0,{type:'start'});
+ for(const disc of ['flower','skull']){
+  for(let i=0;i<3;i++)await move(i,{type:'place',disc:i===0?disc:'flower'});
+  await move(0,{type:'bid',amount:1});await move(1,{type:'pass'});await move(2,{type:'pass'});
+  let views=await states();assert.ok(views.every(s=>s.flips.at(-1).disc===disc));
+  if(disc==='skull'){assert.ok(views.every(s=>s.stage==='loss'));views=await states();assert.ok(views.every(s=>s.discarded.owner===0&&s.seats[0].discs===3));}
+  assert.ok(views.every(s=>s.stage==='result'));
+  if(disc==='flower')await move(0,{type:'next'});
+ }
 });

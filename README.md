@@ -40,10 +40,20 @@ The public HTTPS game navigates to the local host before connecting to its WebSo
 
 ## Play and recovery
 
-Three to six players join before the host starts. Everyone places a secret disc. The next player can place another disc or bid up to the number of discs on the table. After the first bid, no one can place more discs. The high bidder reveals their own stack first, then chooses others. Two successful challenges win; revealing a skull costs one hidden disc.
+Three to six players join before the host starts. Guests tap **I’M READY**; bots are ready automatically. The host’s **Start Game** confirms their readiness. A lobby disconnect resets that guest’s readiness. Everyone places a secret disc. The next player can place another disc or bid up to the number of discs on the table. After the first bid, no one can place more discs. The high bidder reveals their own stack first, then chooses others. Two successful challenges win; revealing a skull costs one hidden disc.
 
 Each table has its own code and seats, so multiple groups can play concurrently on one server. The host can use the gear button to transfer hosting to a connected player at any time or remove a player before the match starts. The app is installable from its menu on supported HTTPS browsers; on iPhone, use Safari's Share → Add to Home Screen option.
+
+**Menu → Pause Table** pauses a shared match without losing the round; connected surviving players vote to continue. **Play Again** starts a rematch with the same seats. **Return to Lobby** keeps the party and displayed scores, clears the previous cards/bids, resets readiness, and lets new friends join; starting resets match scores.
 
 If a player disconnects, the table pauses. Players can reconnect using their browser's saved seat token. Connected players may vote to continue, with host control transferred if needed.
 
 `npm test` builds the frontend and runs the rule and WebSocket tests.
+
+## Interface verification
+
+See [the coverage checklist](docs/INTERFACE_COVERAGE.md) for browser sizes, states, multiplayer scenarios, screenshots and remaining device checks. Tests use independent local clients; physical-device LAN reachability is not yet verified.
+
+Online entry now creates a room with one tap. Use **Menu → Join Online Room** for a code, or open an invitation directly. **BONES Home** returns to this game’s entry; **Decadence Arcade** returns to the parent collection. Slow online-host wake-up is allowed up to 45 seconds.
+
+The current public host was observed running an older protocol. The updated client adapts basic play and hides unsupported controls. New readiness, bots, shared pause and lobby-return behavior requires deploying the updated server. Public room loss and delayed host-disconnect notification were observed during QA; durable storage and the updated server are required before promising uninterrupted public sessions.
