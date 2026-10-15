@@ -244,6 +244,6 @@ dialog[open] h2,dialog[open] p{animation:ink-arrive .28s ease-out both}
 .private-peek-cards img{display:block;width:min(100%,90px);height:124px;object-fit:contain;margin:auto}
 .private-peek-cards figcaption{margin-top:6px;font-size:11px;color:var(--mint);font-weight:800}
 
-@media(min-width:600px){canvas{min-height:964px}canvas[data-table=true]{min-height:964px}}
+@media(min-width:760px){canvas,canvas[data-table=true]{min-height:700px;height:calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom))}#bottom-nav{left:max(20px,calc((100vw - 1344px)/2));z-index:8}}
 
 .played-cards{justify-content:safe center}

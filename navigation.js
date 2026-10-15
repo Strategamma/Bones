@@ -19,12 +19,18 @@ function renderMenu(){
  const close=document.createElement('button');close.textContent=document.querySelector('#game').dataset.table==='true'?'BACK TO TABLE':'BACK TO BONES';close.className='dialog-primary';close.onclick=()=>menu.close();menu.append(close);
  if(focused)Array.from(menu.querySelectorAll('button')).find(b=>b.dataset.action===focused||['SOUND','MUTED'].includes(focused)&&['SOUND','MUTED'].includes(b.dataset.action))?.focus();
 }
-trigger.onclick=()=>{renderMenu();menu.showModal()};
+let directAction=null,triggerMode='menu';
+trigger.onclick=()=>{if(directAction){directAction();return}renderMenu();if(!menu.open)menu.showModal()};
 let key='';
 export function syncNavigation(entries,direct){
- trigger.setAttribute("aria-label",direct?"BACK TO HOME":"MENU");trigger.removeAttribute("aria-haspopup");if(!direct)trigger.setAttribute("aria-haspopup","dialog");
- trigger.innerHTML=direct?'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7"/></svg><span>Home</span>':'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14"/></svg><span>MENU</span>';
- trigger.onclick=direct||(()=>{renderMenu();menu.showModal()});
+ directAction=direct||null;
+ const mode=direct?'home':'menu';
+ if(mode!==triggerMode){
+  triggerMode=mode;
+  trigger.setAttribute('aria-label',direct?'BACK TO HOME':'MENU');
+  if(direct)trigger.removeAttribute('aria-haspopup');else trigger.setAttribute('aria-haspopup','dialog');
+  trigger.innerHTML=direct?'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m14 5-7 7 7 7"/></svg><span>Home</span>':'<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M5 12h14M5 17h14"/></svg><span>MENU</span>';
+ }
  actions=entries.filter(([label])=>!['ROOMS','DECADENCE ARCADE'].includes(label));const next=actions.map(([label])=>label).join('|');
  if(menu.open&&next!==key)renderMenu();key=next;
 }

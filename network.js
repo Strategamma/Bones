@@ -1,4 +1,5 @@
 import {decorateDialog,messageDialog} from './dialogs.js';
+import {drawDesktopTable} from './desktop-table.js';
 import { soundEnabled, toggleSound } from './audio.js';
 import { showRulebook } from './rulebook.js';
 import { defaultTableAddress, localTableUrl, automaticEntry, connectionTimeout, connectionMessage, tableCapabilities, tableInvite, ARCADE_URL } from './entry.js';
@@ -361,11 +362,15 @@ async function shareInvite() {
   decorateDialog(dialog,net.mode==='lan'?'table-lan':'table-online');dialog.addEventListener('close',()=>dialog.remove());document.body.append(dialog);dialog.showModal();
 
 }
+function confirmRemovePlayer(p,i,s){
+ messageDialog({title:'REMOVE PLAYER?',detail:`Remove ${p.name} from this table? They will need to join again.`,asset:'nav-host',actions:[{label:'KEEP PLAYER',primary:true},{label:'REMOVE PLAYER',run:()=>{const current=net.state,target=p.id?current?.seats.findIndex(seat=>seat.id===p.id):i;if(target<0||!current||current.code!==s.code||(!p.id&&current.seats[target]?.name!==p.name)){net.notice='That player has left. Select a seat again.';net.onChange();return;}sendAction({type:'kick',target,playerId:p.id});}}]});
+}
 let selectedReveal = null, selectionKey = '';
 export function drawTable(ui) {
   const { header, panel, txt, button, disc, cardChoice, art, H, colors } = ui;
   const controls=()=>{const entries=[[soundEnabled()?'SOUND':'MUTED',()=>{toggleSound();net.onChange()},soundEnabled()?'sound':'mute'],['RULES',()=>showRulebook(net.features),'help'],...(net.features?.pause && net.state && !['lobby','win','paused'].includes(net.state.stage) && net.state.seats[net.state.seat]?.discs>0 ? [['PAUSE TABLE',()=>sendAction({type:'pause'}),'help']] : []),...(net.mode==='lan'?[['ROOMS',showRooms,'rooms']]:[]),...(net.state?.host===net.state?.seat?[['HOST',showHostControls,'host']]:[]),['BONES HOME',leaveTable,'home'],['DECADENCE ARCADE',returnToArcade,'home']];ui.navigation(entries);};
   const s = ui.displayState || net.state;
+  if(ui.desktop){controls();drawDesktopTable(ui,{state:s,net,sendAction,editName,peekOwnCards,removePlayer:confirmRemovePlayer,shareInvite,leaveTable});return;}
   if (!s) {
     header(net.mode === 'lan' ? 'LAN TABLE' : 'INTERNET TABLE', net.connected ? 'Connecting to the table…' : 'Choose a name to create or join.');
     controls();
@@ -425,7 +430,7 @@ export function drawTable(ui) {
       const status=!p.connected?'OFFLINE':p.discs===0?'OUT':['add','bid','reveal'].includes(s.stage)&&s.passed[i]?'PASSED':['add','bid','reveal'].includes(s.stage)&&p.bid?`BID ${p.bid}`:active?'TURN':'';
       if(status&&p.wins&&status!=='TURN'){txt(status,x+156,y+66,9,active?'#ffd981':'#f7f2e9',800,'right',88);}else if(status&&!p.wins){panel(x+57,y+41,66,20,active?'#ffd981':'#44364f',active?'#ffd981':'#665771',8);txt(status,x+90,y+51,10,active?'#241b38':'#f7f2e9',900,'center',60);}
     }
-    if(s.stage==='lobby'&&host&&i!==me){ui.seatControl(x+145,y+24,'×',()=>messageDialog({title:'REMOVE PLAYER?',detail:`Remove ${p.name} from this table? They will need to join again.`,asset:'nav-host',actions:[{label:'KEEP PLAYER',primary:true},{label:'REMOVE PLAYER',run:()=>{const current=net.state;const target=p.id?current?.seats.findIndex(seat=>seat.id===p.id):i;if(target<0||!current||current.code!==s.code||(!p.id&&current.seats[target]?.name!==p.name)){net.notice='That player has left. Select a seat again.';net.onChange();return;}sendAction({type:'kick',target,playerId:p.id});}}]}),`Remove ${p.name}`);}
+    if(s.stage==='lobby'&&host&&i!==me)ui.seatControl(x+145,y+24,'×',()=>confirmRemovePlayer(p,i,s),`Remove ${p.name}`);
     if(i===ui.stackSeat&&ui.stackAge>=0&&ui.stackAge<.5&&!ui.reducedMotion){const t=ui.stackAge/.5,e=1-(1-t)**3;ui.cardRect(195+(x+12-195)*e,stageY+(y+58-stageY)*e,23,30,'back',null,colors[i]);}
     if(i===ui.pointSeat&&ui.pointAge<.85&&!ui.reducedMotion){const t=Math.min(1,ui.pointAge/.85);art('point-badge',195+(x+137-195)*t-10,H*.6+(y+43-H*.6)*t-Math.sin(t*Math.PI)*40-10,20,20);}
   });
@@ -435,7 +440,6 @@ export function drawTable(ui) {
     ui.emptySeat(x,y,168,seatHeight,fill,`Add bot to seat ${i+1}`);
 
   }
-  if(!['lobby','reveal'].includes(s.stage)){ui.cardCount(232,27,'','#bfb1ce');txt('CARDS LEFT',259,28,10,'#bfb1ce',700,'left',112);}
   if (s.stage === 'lobby') {
     const connected = s.seats.filter(p => p.connected).length;
     const waiting = net.features?.readiness ? s.seats.filter((p,i)=>i!==s.host && !p.bot && !p.ready).length : 0;

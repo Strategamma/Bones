@@ -13,3 +13,11 @@ Risks: canvas versus DOM coordinate mismatch, stretched artwork, clipped or unre
 Verification: screenshots at narrow phone and desktop for all main states; tablet/landscape representative checks, popup keyboard dismissal and input; automated suite. Physical devices and native install/share prompts remain outside this pass.
 
 Status: screen/popup pass completed. Shared artwork, avatar, card-outline/hit-target, reconnect and landscape host-close defects fixed and retested. 58 tests passed; final build/diff checks passed. Detailed evidence: docs/RESPONSIVE_AUDIT.md.
+
+Goal: replace stretched desktop rendering with a genuine desktop layout and repair Menu activation.
+Scope: proportional desktop coordinate system, three-column shared seat/card components, compact action zones, desktop home; preserve phone UI and shared dialogs.
+Approach: uniform scaling with viewport-aware logical width; dedicated desktop composition reusing rendering/control primitives and authoritative actions. Stabilize Menu DOM between frames.
+Risks: canvas/DOM hit-area mapping, reveal card placement, orientation transitions, animations and focus.
+Verification: phone/desktop screens and dialogs, animated pointer/keyboard Menu, card/bid/reveal/rematch actions, automated suite and build.
+
+Status: complete. Desktop phase/home screenshots and phone/tablet/laptop checks passed; Menu pointer/keyboard and real local bot-table actions verified. Responsive reveal callback fixed. 59 tests and production build passed; physical devices and deployment remain unverified.

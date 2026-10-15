@@ -1,8 +1,19 @@
-# Fluid-width UI verification — 15 October 2026
+# Responsive UI verification — 15 October 2026
 
 Browser evidence uses the Codex in-app browser. Phone/desktop dimensions are viewport simulations, not physical devices. User's active server on port 10030 was not restarted or used for destructive testing.
 
-## Screen coverage
+## Desktop recomposition follow-up
+
+Supersedes the earlier horizontally expanded desktop presentation. Uniform scaling now preserves proportions; wide screens use three columns, bounded mats, and separate hand/action zones. Phones retain two columns. Menu markup remains stable during rendering, fixing missed activation. Reveal handlers refresh when crossing the responsive breakpoint.
+
+- Browser viewport checks: 390×844 phone, 768×1024 tablet, 1024×768 laptop and 1440×900 desktop. Geometry tests additionally cover widths through 2560px.
+- Desktop screenshots inspected: home, host lobby, six-player place/add/bidding/reveal/loss/lead/result/victory/pause. Reveal cards were selected on both sides of the phone/desktop breakpoint.
+- Menu verified with repeated mouse activation, keyboard Enter/Escape, and while a real bot game updated. Private-card peek and reveal confirmation inspected. Final desktop console check reported no errors.
+- Isolated real local server: add bot, confirmed removal, refill, start three players, place flower, bid, automatic own-card reveal. Conditional screen fixtures are presentation checks, not independent multiplayer clients.
+- Automated suite: 59 tests passed; production build passed. No physical-device, production deployment or new cross-device LAN claim.
+- Screenshots: `output/player-experience/desktop-add-redesign.jpg`, `desktop-three-player-redesign.jpg`, `desktop-reveal-final-redesign.jpg`, `desktop-home-redesign.jpg`, `desktop-phone-preserved-redesign.jpg`.
+
+## Earlier screen coverage
 
 | Screen/state | Verification |
 | --- | --- |
@@ -57,3 +68,7 @@ Screenshots: `output/player-experience/audit-*.jpg`. Representative final files:
 Short landscape and small phone screens scroll vertically; the board has not been redesigned into a landscape-specific seat arrangement. Not verified here: physical touch, virtual keyboard/browser chrome/safe areas, installed PWA lifecycle, native install/share sheets, audio through actual speakers, physical LAN devices/router, production deployment or every browser engine. No claim that the game is bug-free or production LAN-ready follows from this pass.
 
 Online entry follow-up: home Play Online now keeps room-code entry open; Create My Own Room is a separate explicit action. Browser verified joining public room W7XHXX as a second client, with matching host/guest player lists. Shared automatic-entry path hides transient setup forms, exposes Connecting and supports menu cancellation. Entry/layout tests and build passed.
+
+## Legend removal follow-up
+
+Removed both phone and desktop global Cards Left legends; per-seat counts and accessible summaries remain. Rechecked desktop lobby, place, add, bidding, reveal introduction, loss, choose-lead, result, victory and pause screenshots at 1440×900; shared Menu opened/dismissed successfully. Phone add/hand/bids checked at 390×844. Earlier home/setup/error/settled-reveal/dialog checks above remain applicable; they were not all repeated for this cosmetic removal. Production build and layout tests passed. Screenshot: `output/player-experience/desktop-no-legend.jpg`.
