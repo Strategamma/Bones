@@ -121,3 +121,7 @@ Own stack is marked PEEK and tappable during place/add/bid/pause. Dialog shows o
 
 ## Spacing pass after discarded-round screenshot
 Expanded gameplay mats to104px with16px row gaps; results/paused mats112px. Identity, role/status, and card-count lanes are separated. Result views omit stale bid/pass pills, use an icon/message row in lower space, and place Next Round near the bottom. Short-screen table minimum increased modestly to preserve action clearance. Verified controlled six-seat discarded result at390×844, Next Round and three-card hand at320×568. Four layout/input checks, build and diff checks passed. Screenshot: spacious-round-result.jpg.
+
+- Fluid width: verified 430px phone and 1440px desktop canvas fills viewport; isolated reveal card selection still exposes confirmation; no captured console errors. Build plus five layout/input tests pass. Physical-device check remains open.
+
+Full fluid-width follow-up: see `docs/RESPONSIVE_AUDIT.md` for the page/popup matrix, fixes, screenshot locations and explicit evidence limits.

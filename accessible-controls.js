@@ -27,10 +27,10 @@ export function syncCanvasControls(canvas,spots,activate,press,blocked=false){
   }
   if(focused)restore=Array.from(layer.children).find(b=>b.getAttribute('aria-label')===label)||layer.children[Math.min(index,spots.length-1)]||document.querySelector('#bottom-nav button');
  }
- const rect=canvas.getBoundingClientRect(),scale=rect.width/390;
+ const rect=canvas.getBoundingClientRect(),scale=rect.width/390,scaleY=rect.height/Number(canvas.dataset.logicalHeight||844);
  for(let i=0;i<spots.length;i++){
   const spot=spots[i],b=layer.children[i];
-  Object.assign(b.style,{left:`${rect.left+spot.x*scale}px`,top:`${rect.top+spot.y*scale}px`,width:`${spot.w*scale}px`,height:`${spot.h*scale}px`});
+  Object.assign(b.style,{left:`${rect.left+spot.x*scale}px`,top:`${rect.top+spot.y*scaleY}px`,width:`${spot.w*scale}px`,height:`${spot.h*scaleY}px`});
   bindings.set(b,spot);b.setAttribute('aria-disabled',String(blocked));
  }
  restore?.focus({preventScroll:true});

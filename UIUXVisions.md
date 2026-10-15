@@ -78,3 +78,7 @@ Earned-point sound is a bright C-major ascending fanfare, resolving into a soft 
 No legend row between mats and hand. Cards-left icon key lives unobtrusively at the header’s top right; hand content moves14 logical pixels up into the reclaimed space.
 
 Reveal mats separate identity, point/revealer status and card strips with clear vertical spacing. Omit redundant hidden/card totals; preserve bottom/top order on cards. Show the confirmation button only after selection, with one progress line and one contextual instruction.
+
+Fluid viewport: canvas uses all safe-area width. Wide-screen panel coordinates expand horizontally while text and card artwork retain vertical-scale proportions. DOM controls use independent horizontal/vertical geometry; preserve this mapping when adding controls. Short viewports scroll rather than clip.
+
+Responsive audit: draw SVG avatar regions through clipping, rather than source-cropping under unequal scales. Normalize decorative artwork transforms while retaining card flips. Card outlines/hit targets follow the visible card, not its expanded desktop slot. Host popup close scrolls with the header; Done remains at the bottom. Avoid duplicate reconnect banners.

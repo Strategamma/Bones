@@ -8,11 +8,11 @@ document.body.append(bids);
 let bidKey = '';
 export function hideBids() { bids.hidden = true; }
 export function showBids({x,y,w,min,max,height=96,bottomAlign=false}) {
-  const canvas = document.querySelector('#game'), rect = canvas.getBoundingClientRect(), scale = rect.width / 390;
+  const canvas = document.querySelector('#game'), rect = canvas.getBoundingClientRect(), scale = rect.width / 390, scaleY=rect.height/Number(canvas.dataset.logicalHeight||844);
   const columns = rect.width < 350 ? 5 : 6;
   bids.style.setProperty('--bid-columns',columns);
-  bids.hidden = false; bids.style.left = `${rect.left+x*scale}px`; bids.style.top = `${rect.top+y*scale}px`;
-  bids.style.width = `${w*scale}px`; bids.style.setProperty('--bid-height',`${Math.max(94,height*scale)}px`);
+  bids.hidden = false; bids.style.left = `${rect.left+x*scale}px`; bids.style.top = `${rect.top+y*scaleY}px`;
+  bids.style.width = `${w*scale}px`; bids.style.setProperty('--bid-height',`${Math.max(94,height*scaleY)}px`);
   bids.querySelector('p').textContent = max-min>=12 ? 'Tap a bid · swipe for more numbers →' : 'How many flowers? Tap your bid.';
   const key = `${net.code}:${net.state?.round}:${min}:${max}:${columns}`;
   if (key !== bidKey) {
@@ -26,15 +26,15 @@ export function showBids({x,y,w,min,max,height=96,bottomAlign=false}) {
   }
   for (const button of bids.querySelectorAll('button')) button.disabled = net.pendingAction || net.connecting || !net.connected;
   const renderedHeight=bids.getBoundingClientRect().height;
-  if(bottomAlign){y=Math.max(y,(rect.height-renderedHeight-16)/scale);bids.style.top=`${rect.top+y*scale}px`;}
-  return {bottom:y+renderedHeight/scale,scale};
+  if(bottomAlign){y=Math.max(y,(rect.height-renderedHeight-16)/scaleY);bids.style.top=`${rect.top+y*scaleY}px`;}
+  return {bottom:y+renderedHeight/scaleY,scale};
 }
 export function syncGameplayControls() { const s=net.state,turn=s?.turn===s?.seat; if(!turn||!['add','bid'].includes(s?.stage))hideBids(); if(s?.stage!=='reveal')tables.hidden=true; if(s?.stage!=='reveal'||!turn||net.features?.automaticReveal&&s.seats[s.challenger]?.stack>s.flips.filter(f=>f.owner===s.challenger).length)confirm.hidden=true; }
 
 const tables = document.createElement('div'); tables.id='table-cards'; tables.hidden=true; document.body.append(tables);
 let tablesKey='';
 export function showTableCards({automaticOwn=false,state,selected,onSelect,startY,rowH,flipAge,reducedMotion,busy,announcing}) {
-  const canvas=document.querySelector('#game'),rect=canvas.getBoundingClientRect(),scale=rect.width/390;
+  const canvas=document.querySelector('#game'),rect=canvas.getBoundingClientRect(),scale=rect.width/390,scaleY=rect.height/Number(canvas.dataset.logicalHeight||844);
   tables.hidden=false;tables.style.visibility=announcing?'hidden':'visible';
   const key=JSON.stringify([state.code,state.round,state.turn,state.challenger,state.flips,state.seats.map(p=>[p.name,p.stack])]);
   const ownLeft=state.seats[state.challenger].stack-state.flips.filter(f=>f.owner===state.challenger).length;
@@ -52,8 +52,8 @@ export function showTableCards({automaticOwn=false,state,selected,onSelect,start
   const names=['coral','mint','amber','violet','blue','orchid'];
   for(const strip of tables.children){
     const seat=Number(strip.dataset.seat),player=state.seats[seat];
-    Object.assign(strip.style,{left:`${rect.left+(28+seat%2*183)*scale}px`,top:`${rect.top+(startY+Math.floor(seat/2)*rowH+64)*scale}px`,width:`${152*scale}px`,height:`${Math.max(74,(rowH-78)*scale)}px`});
-    const cardH=Math.max(64,Math.min(92,(rowH-90)*scale));strip.style.setProperty('--played-height',`${cardH}px`);strip.style.setProperty('--played-width',`${Math.max(56,cardH*.76)}px`);
+    Object.assign(strip.style,{left:`${rect.left+(28+seat%2*183)*scale}px`,top:`${rect.top+(startY+Math.floor(seat/2)*rowH+64)*scaleY}px`,width:`${152*scale}px`,height:`${Math.max(74,(rowH-78)*scaleY)}px`});
+    const cardH=Math.max(64,Math.min(92,(rowH-90)*scaleY));strip.style.setProperty('--played-height',`${cardH}px`);strip.style.setProperty('--played-width',`${Math.max(56,cardH*.76)}px`);
     for(const button of strip.children){
       const index=Number(button.dataset.index),opened=state.flips.find(f=>f.owner===seat&&f.index===index),active=selected?.target===seat&&selected.index===index;
       button.dataset.opened=String(!!opened);
@@ -71,7 +71,7 @@ export function showTableCards({automaticOwn=false,state,selected,onSelect,start
 }
 const confirm = document.createElement('button');confirm.id='reveal-confirm';confirm.style.backgroundImage=`url(${import.meta.env.BASE_URL}assets/button-gold.svg)`;confirm.hidden=true;document.body.append(confirm);
 export function showRevealConfirm({x,y,w,h,choice,onConfirm,disabled,announcing}) {
-  const rect=document.querySelector('#game').getBoundingClientRect(),scale=rect.width/390;
-  Object.assign(confirm.style,{left:`${rect.left+x*scale}px`,top:`${rect.top+y*scale}px`,width:`${w*scale}px`,height:`${Math.max(44,h*scale)}px`});
+  const canvas=document.querySelector('#game'),rect=canvas.getBoundingClientRect(),scale=rect.width/390,scaleY=rect.height/Number(canvas.dataset.logicalHeight||844);
+  Object.assign(confirm.style,{left:`${rect.left+x*scale}px`,top:`${rect.top+y*scaleY}px`,width:`${w*scale}px`,height:`${Math.max(44,h*scaleY)}px`});
   confirm.hidden=!choice;confirm.style.visibility=announcing?'hidden':'visible';confirm.disabled=!choice||disabled||net.connecting||net.pendingAction||!net.connected;confirm.textContent=choice?'REVEAL SELECTED CARD':'TAP A CARD TO SELECT';confirm.onclick=onConfirm;
 }

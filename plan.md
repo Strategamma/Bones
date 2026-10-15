@@ -5,3 +5,11 @@ Risks: duplicated votes, disconnected seats, seat reindexing, narrow-phone overl
 Verification: full suite, vote/partial-lobby regressions, browser winner/guest CTA and bot add/cancel/confirmed removal.
 
 Status: implemented; 50 tests/build pass. Browser verified winner/guest flow, host Manage Seats, real local bot fill/removal confirmation, and narrow-phone spacing. Public server needs update for opt-in protocol.
+
+Goal: verify every reachable screen and popup after fluid-width changes.
+Scope: home, setup/loading/error, lobby, place/add/bid/reveal/loss/lead/result/win/pause, name/menu/rules/install/host/invite/removal/leave/peek dialogs.
+Approach: isolated controlled-state browser fixtures for conditional screens; actual UI interactions for overlays; fix shared scaling defects.
+Risks: canvas versus DOM coordinate mismatch, stretched artwork, clipped or unreachable controls at short heights.
+Verification: screenshots at narrow phone and desktop for all main states; tablet/landscape representative checks, popup keyboard dismissal and input; automated suite. Physical devices and native install/share prompts remain outside this pass.
+
+Status: screen/popup pass completed. Shared artwork, avatar, card-outline/hit-target, reconnect and landscape host-close defects fixed and retested. 58 tests passed; final build/diff checks passed. Detailed evidence: docs/RESPONSIVE_AUDIT.md.

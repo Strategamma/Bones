@@ -7,6 +7,6 @@ export function syncFeedback(net,canvas){
  const message=net.error||net.notice||'';
  if(message!==text.textContent){dismissed='';text.textContent=message;}
  toast.hidden=!message||message===dismissed;
- if(!toast.hidden){const rect=canvas.getBoundingClientRect();toast.style.left=`${rect.left+12}px`;toast.style.top=`${rect.top+65*rect.width/390}px`;toast.style.width=`${rect.width-24}px`;}
+ if(!toast.hidden){const rect=canvas.getBoundingClientRect();toast.style.left=`${rect.left+12}px`;toast.style.top=`${rect.top+65*rect.height/Number(canvas.dataset.logicalHeight||844)}px`;toast.style.width=`${rect.width-24}px`;}
  close.onclick=()=>{dismissed=message;toast.hidden=true;};
 }

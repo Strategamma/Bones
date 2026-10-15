@@ -399,7 +399,6 @@ export function drawTable(ui) {
     if(host&&net.features?.returnLobby)button('MANAGE SEATS',90,H-56,210,44,()=>sendAction({type:'lobby'}),'dark');
     return;
   }
-  if (!net.connected) { panel(20, 65, 350, 58, '#69415a', '#f6a3aa'); txt('Reconnecting to your table…', 195, 94, 15, '#fff', 800); }
   const crowded = s.stage !== 'lobby' && H < 760;
   const tight=s.seats.length>=5&&H<640;
   const top=142,seatHeight=['result','paused'].includes(s.stage)?112:104,gap=seatHeight+16;
@@ -489,7 +488,7 @@ export function drawTable(ui) {
 
       txt(i===me?`${p.name} · YOU`:p.name,x+40,y+23,14,'#f7f2e9',900,'left',116);
       if(p.wins)txt(`★ ${p.wins} POINT${p.wins===1?'':'S'}`,x+12,y+47,10,'#ffd981',900,'left',100);
-      if(i===s.challenger)txt('BID WON',x+156,y+47,9,'#ffd981',800,'right',72);
+      if(i===s.challenger&&!p.wins)txt('BID WON',x+156,y+47,9,'#ffd981',800,'right',72);
       if(!p.stack)txt('NO CARDS PLAYED',x+84,y+rowH*.6,10,'#b5a5c9',700);
     });
     showTableCards({automaticOwn:!!net.features?.automaticReveal,state:s,selected:selectedReveal,onSelect:choice=>{selectedReveal=choice;net.onChange()},startY,rowH,flipAge:ui.flipAge,reducedMotion:ui.reducedMotion,busy:ui.flipAge<1.25||!s.flips.length&&ui.phaseAge<1.5,announcing:!s.flips.length&&ui.phaseAge<1.5});
@@ -507,7 +506,7 @@ export function drawTable(ui) {
     for(let index=0;index<s.lossCount;index++){const x=195-(s.lossCount*w+(s.lossCount-1)*12)/2+index*(w+12);ui.cardRect(x,y,w,h,'back',me===s.skullOwner?()=>sendAction({type:'discard',index}):null,colors[s.challenger],`Discard hidden card ${index+1}`);}
   } else if (s.stage === 'choose-lead') {
     txt(`${s.seats[s.challenger].name} chooses the next lead`, 195, H - 283, 15, '#91d9c7', 800);
-    s.seats.forEach((p, i) => { if (p.discs) button(p.name, 25 + i % 2 * 174, H - 248 + Math.floor(i / 2) * 57, 165, 49, me === s.challenger ? () => sendAction({ type: 'lead', target: i }) : null, me === s.challenger ? 'gold' : 'dark'); });
+    s.seats.map((p,target)=>({...p,target})).filter(p=>p.discs).forEach((p,i)=>button(p.name,25+i%2*174,H-248+Math.floor(i/2)*57,165,49,me===s.challenger?()=>sendAction({type:'lead',target:p.target}):null,me===s.challenger?'gold':'dark'));
   } else if (s.stage === 'result') {
     const resultY=Math.max(stageY+12,(stageY+H-110)/2-40);
     art(s.resultKind==='flower'?'point-badge':'card-discard',40,resultY,70,70);
