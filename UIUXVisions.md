@@ -82,3 +82,7 @@ Reveal mats separate identity, point/revealer status and card strips with clear 
 Fluid viewport: canvas uses all safe-area width. Wide-screen panel coordinates expand horizontally while text and card artwork retain vertical-scale proportions. DOM controls use independent horizontal/vertical geometry; preserve this mapping when adding controls. Short viewports scroll rather than clip.
 
 Responsive audit: draw SVG avatar regions through clipping, rather than source-cropping under unequal scales. Normalize decorative artwork transforms while retaining card flips. Card outlines/hit targets follow the visible card, not its expanded desktop slot. Host popup close scrolls with the header; Done remains at the bottom. Avoid duplicate reconnect banners.
+
+Automatic entry keeps the home screen visible with a Connecting cue; hide the setup shell until input/recovery is required. Keep explicit join-code entry visible. Menu cancellation closes the pending socket and returns home.
+
+Play Online opens explicit room-code entry with a separate Create My Own Room action. Only invitations and an explicit create command connect automatically; pressing the home Online tile must never create a room.

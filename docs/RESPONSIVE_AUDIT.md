@@ -8,7 +8,7 @@ Browser evidence uses the Codex in-app browser. Phone/desktop dimensions are vie
 | --- | --- |
 | Home and saved name | 320×568 and 1440×900 screenshots; name editor save/empty validation |
 | LAN setup | Narrow phone and desktop; expanded connection options; reachable buttons through scrolling/keyboard |
-| Online create/join setup | Entry and join-code form reviewed; HTTP address validation checked. Public Internet transport was not retested in this pass |
+| Online create/join setup | Entry and join-code form reviewed; HTTP address validation checked. Follow-up: two independent browser clients joined the same public online lobby successfully; public completed-match transport was not retested |
 | Connecting | Controlled server that accepts a socket without replying; busy fields/submit and recovery navigation inspected |
 | Host unreachable | Unused local port; recovery form/message inspected on phone and desktop |
 | Invalid/expired code | Actual isolated server; unknown code produces recovery text |
@@ -55,3 +55,5 @@ Screenshots: `output/player-experience/audit-*.jpg`. Representative final files:
 ## Limits
 
 Short landscape and small phone screens scroll vertically; the board has not been redesigned into a landscape-specific seat arrangement. Not verified here: physical touch, virtual keyboard/browser chrome/safe areas, installed PWA lifecycle, native install/share sheets, audio through actual speakers, physical LAN devices/router, production deployment or every browser engine. No claim that the game is bug-free or production LAN-ready follows from this pass.
+
+Online entry follow-up: home Play Online now keeps room-code entry open; Create My Own Room is a separate explicit action. Browser verified joining public room W7XHXX as a second client, with matching host/guest player lists. Shared automatic-entry path hides transient setup forms, exposes Connecting and supports menu cancellation. Entry/layout tests and build passed.

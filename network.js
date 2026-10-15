@@ -155,11 +155,12 @@ export function openTable(mode, name, code = '', automatic = true, codeEntry = f
   $('#table-submit').textContent = code || codeEntry ? 'JOIN ROOM' : mode === 'lan' ? 'JOIN WI-FI PARTY' : 'CREATE ROOM';
   $('#table-resume').hidden = lastSeat()?.mode !== mode;
   $('#table-error').textContent = '';
-  shell.hidden = false;
+  net.automaticEntry=automatic && automaticEntry(mode, localServer(), code, inviteAddress);
+  shell.hidden=net.automaticEntry;
   $('#table-form').scrollTop = 0;
+  if(net.automaticEntry)enterTable();
   net.onChange();
-  if (automatic && automaticEntry(mode, localServer(), code, inviteAddress)) enterTable();
-  else if(codeEntry) $('#table-code').focus();
+  if(!net.automaticEntry&&codeEntry) $('#table-code').focus();
 }
 $('#table-code').addEventListener('input', () => { $('#table-create').hidden = net.mode!=='internet'||!$('#table-code').value.trim()&&!$('#table-code').required; $('#table-submit').textContent = $('#table-code').value.trim() || $('#table-code').required ? 'JOIN ROOM' : net.mode === 'lan' ? 'JOIN WI-FI PARTY' : 'CREATE ROOM'; });
 $('#table-create').addEventListener('click',()=>{if(net.connecting)return;$('#table-code').value='';$('#table-code').required=false;enterTable()});
@@ -202,7 +203,7 @@ function enterTable() {
     else command = {type:'create',name:name || 'Friend'};
     if (command.type !== 'resume' && !command.token) net.token = '';
     connect(command);
-  } catch (error) { $('#table-error').textContent = error.message; }
+  } catch (error) { shell.hidden=false;net.automaticEntry=false;$('#table-error').textContent = error.message;net.onChange(); }
 }
 function socketUrl(url) { const u = new URL(url); u.protocol = u.protocol === 'https:' ? 'wss:' : 'ws:'; u.pathname = '/ws'; u.search = ''; u.hash = ''; return u.href; }
 function connect(first) {
