@@ -21,3 +21,7 @@ Risks: canvas/DOM hit-area mapping, reveal card placement, orientation transitio
 Verification: phone/desktop screens and dialogs, animated pointer/keyboard Menu, card/bid/reveal/rematch actions, automated suite and build.
 
 Status: complete. Desktop phase/home screenshots and phone/tablet/laptop checks passed; Menu pointer/keyboard and real local bot-table actions verified. Responsive reveal callback fixed. 59 tests and production build passed; physical devices and deployment remain unverified.
+
+Goal: center empty-seat content and victory actions; enrich winning feedback. Scope: shared seat geometry, desktop action grouping, shared flower/star crown accents and bounded confetti; preserve reduced motion and immediate actions. Risks: short-screen button overlap and input gating. Verification: desktop lobby/win and phone win screenshots, reduced motion, rematch, build/layout checks.
+
+Status: complete. Desktop lobby, host/guest victory, phone victory and reduced-motion laptop layouts checked; Manage Seats returns to lobby. Build/layout tests/diff check passed.

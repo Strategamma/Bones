@@ -15,7 +15,7 @@ shell.innerHTML = `<form id="table-form" aria-labelledby="table-title">
   <img class="table-brand" src="${import.meta.env.BASE_URL}assets/bones-platform-logo.png" alt="BONES">
   <div class="setup-mode"><img id="table-mode-art" alt=""><div><div class="table-kicker">PLAY WITH FRIENDS</div><h2 id="table-title">Join a table</h2></div></div>
   <p id="table-detail"></p>
-  <div class="table-meta"><span>3–6 players</span><span>One phone each</span></div>
+  <div class="table-meta"><span>3–6 players</span></div>
   <label>Your name <span class="field-optional">saved for next time</span><input id="table-name" maxlength="32" autocomplete="nickname" placeholder="What should we call you?"></label>
   <details id="connection-options"><summary>Connection help</summary><label id="address-label"><span id="address-title">Server address</span><input id="table-address" type="text" inputmode="url" required><span id="lan-address-tip" hidden>If bones.local won't open, use the fallback IP shown in the host window. This address is saved for next time.</span></label></details>
   <details id="code-options"><summary>Have a room code?</summary><label>Table code <span class="field-optional">optional</span><input id="table-code" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="Enter code to join" aria-describedby="table-code-hint"></label>
@@ -150,6 +150,8 @@ export function openTable(mode, name, code = '', automatic = true, codeEntry = f
   $('#table-address').placeholder = mode === 'lan' ? 'http://bones.local:10000' : 'https://your-game.onrender.com';
   const publicLan = mode === 'lan';
   $('#address-label').hidden = false;
+  $('#connection-options').hidden = mode === 'internet';
+  $('#table-arcade').hidden = mode === 'internet';
   $('#connection-options').open = false; $('#code-options').open = !!code || codeEntry;
   $('#lan-address-tip').hidden = !publicLan;
   $('#table-change-server').hidden = true;
@@ -389,8 +391,8 @@ export function drawTable(ui) {
     ui.navigation([],leaveTable);
     txt('VICTORY',195,84,28,'#f7f2e9',900,'center',330);
     const heroH=190,heroY=122;
-    const t=Math.min(1,ui.phaseAge/.7),zoom=ui.reducedMotion?1:1+2.70158*(t-1)**3+1.70158*(t-1)**2;
-    art('victory-arcade',195-155*zoom,heroY,310*zoom,heroH*zoom);
+    ui.victoryFlourish(195,heroY+heroH/2,125);
+    ui.victoryCrown(40,heroY,310,heroH);
     const nameY=heroY+heroH+30;
     txt(s.winner===me?'YOU WON!':'THE WINNER',195,nameY,30,'#f7f2e9',900,'center',330);
     txt(s.seats[s.winner].name,195,nameY+40,24,'#ffd981',900,'center',330);

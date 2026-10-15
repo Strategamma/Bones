@@ -101,9 +101,9 @@ function stackChoice(x,y,w,h,name,count,color,fn,hint){const enabled=typeof fn==
 function emptySeat(x,y,w,h,fn,label){
  c.save();c.fillStyle='#241b3855';c.strokeStyle='#89759b';c.lineWidth=1.5;c.setLineDash([5,5]);c.beginPath();c.roundRect(x,y,w,h,16);c.fill();c.stroke();c.setLineDash([]);
  const pressed=S.clock-S.pressAt<.2&&Math.abs(S.pressX-x-w/2)<w/2&&Math.abs(S.pressY-y-h/2)<h/2;
- c.translate(x+w/2,y+35);c.scale(verticalScale/scale,1);if(pressed&&!reducedMotion.matches)c.scale(.9,.9);
+ c.translate(x+w/2,y+h/2-16);c.scale(verticalScale/scale,1);if(pressed&&!reducedMotion.matches)c.scale(.9,.9);
  c.strokeStyle=fn?'#91d9c7':'#b6a8c5';c.lineWidth=2;c.beginPath();c.arc(0,0,14,0,Math.PI*2);c.stroke();c.beginPath();c.moveTo(-6,0);c.lineTo(6,0);c.moveTo(0,-6);c.lineTo(0,6);c.stroke();c.restore();
- txt(fn?'Add bot':'Empty seat',x+w/2,y+70,13,fn?'#c9f5e8':'#bfb1ce',700);if(fn)spots.push({x,y,w,h,fn,label});
+ txt(fn?'Add bot':'Empty seat',x+w/2,y+h/2+22,13,fn?'#c9f5e8':'#bfb1ce',700);if(fn)spots.push({x,y,w,h,fn,label});
 }
 function flowerBadge(x,y,count){
  c.save();c.translate(x,y);c.scale(verticalScale/scale,1);c.fillStyle='#ee8a96';for(let i=0;i<5;i++){const a=i*Math.PI*2/5;c.beginPath();c.arc(Math.cos(a)*5,Math.sin(a)*5,4,0,Math.PI*2);c.fill();}c.fillStyle='#ffd981';c.beginPath();c.arc(0,0,3,0,Math.PI*2);c.fill();c.restore();if(count>1)txt(count,x+15,y,12,'#ffd981',900,'left');
@@ -151,12 +151,39 @@ function eventFeedback(){
     art('discard-slot',W/2-60,H*.45,120,100);txt('ONE CARD THROWN AWAY',W/2,H*.69,20,'#ffb6cb',900);
   }
 }
+function victoryFlourish(x,y,r){
+ const age=S.clock-S.phaseAt,motion=!reducedMotion.matches&&age<7;
+ c.save();c.translate(x,y);
+ const appear=reducedMotion.matches?1:Math.min(1,age/.6);
+ if(motion){
+  c.save();c.rotate(age*.18);
+  for(let beam=0;beam<12;beam++){c.rotate(Math.PI/6);c.globalAlpha=.035*appear*Math.max(0,1-age/7);c.fillStyle='#ffd981';c.beginPath();c.moveTo(0,0);c.lineTo(r*1.25,-r*.1);c.lineTo(r*1.25,r*.1);c.closePath();c.fill();}
+  c.restore();
+  for(let i=0;i<24;i++){const delay=(i%3)*.16,burst=age- .25-delay;if(burst<0||burst>1.7)continue;const a=i*Math.PI/12,d=r*(.3+.65*Math.sin(Math.min(1,burst/1.7)*Math.PI/2));c.save();c.translate(Math.cos(a)*d,Math.sin(a)*d*.7);c.rotate(a+burst*2);c.globalAlpha=Math.sin(burst/1.7*Math.PI);c.scale(1.4,1.4);flowerBadge(0,0,1);c.restore();}
+ }
+ c.globalAlpha=.15*appear;c.fillStyle='#ffd981';c.beginPath();c.arc(0,0,r*.78,0,Math.PI*2);c.fill();
+ for(let i=0;i<10;i++){
+  const a=i*Math.PI/5+(motion?Math.sin(age*.65)*.05:0),radius=r*(i%2?.92:1.04),px=Math.cos(a)*radius,py=Math.sin(a)*radius*.77;
+  const pop=motion?1+Math.sin(age*4+i)*.35:1;
+  c.save();c.translate(px,py);c.scale(pop,pop);c.globalAlpha=appear*(i%2?.7:1);
+  if(i%2){c.fillStyle='#ffd981';c.beginPath();for(let n=0;n<8;n++){const angle=n*Math.PI/4,rr=n%2?3:9;c.lineTo(Math.cos(angle)*rr,Math.sin(angle)*rr);}c.closePath();c.fill();}
+  else flowerBadge(0,0,1);
+  c.restore();
+ }
+ c.restore();
+}
+function victoryCrown(x,y,w,h){
+ const age=S.clock-S.phaseAt,t=Math.min(1,age/.8),motion=!reducedMotion.matches;
+ const zoom=motion?1+2.70158*(t-1)**3+1.70158*(t-1)**2:1;
+ const dance=motion?Math.max(0,1-age/5):0;
+ c.save();c.translate(x+w/2,y+h/2-Math.abs(Math.sin(age*4))*12*dance);c.rotate(Math.sin(age*5)*.065*dance);c.scale(zoom*(1+Math.sin(age*8)*.025*dance),zoom*(1-Math.sin(age*8)*.025*dance));art('victory-arcade',-w/2,-h/2,w,h);c.restore();
+}
 function flowerConfetti(age){
- if(age<0||age>3.6)return;
- const fade=Math.min(1,age*5)*Math.min(1,(3.6-age)/.8);
+ if(age<0||age>7)return;
+ const fade=Math.min(1,age*5)*Math.min(1,(7-age)/1.2);
  for(let i=0;i<42;i++){
-  const delay=(i%7)*.07,t=Math.max(0,age-delay),x=(i*97+19)%W+Math.sin(t*2+i)*20,y=-35+(i*53)%(H*.48)+t*(110+i%6*18);
-  if(y>H-165)continue;
+  const delay=(i%7)*.07,t=Math.max(0,age-delay)%3.8,x=(i*97+19)%W+Math.sin(t*2+i)*20,y=-35+(i*53)%(H*.48)+t*(110+i%6*18);
+  if(y>H-165||y>H*.16&&x>W*.22&&x<W*.86)continue;
   c.save();c.translate(x,y);c.rotate(i+t*(i%2?1:-1));c.globalAlpha=fade;c.fillStyle=[...colors,'#f7f2e9'][i%7];
   const r=4+i%3;
   for(let petal=0;petal<5;petal++){const angle=petal*Math.PI*2/5;c.beginPath();c.ellipse(Math.cos(angle)*r,Math.sin(angle)*r,r*.7,r*.95,angle,0,Math.PI*2);c.fill();}
@@ -192,7 +219,7 @@ function drawFrame(){
   syncGameplayControls();
   syncFeedback(net,canvas);
   bg();
-  if(net.mode&&!(net.automaticEntry&&net.connecting&&!net.state)){drawTable({W,desktop,displayState:S.flipDisc&&S.clock-S.flipAt<1.45&&!reducedMotion.matches&&['loss','result','win'].includes(net.state?.stage)?S.flipDisplayState:null,header,panel,txt,button,disc,cardChoice,cardRect,stackChoice,navigation:syncNavigation,art,seatAvatar,cardCount,flowerBadge,seatControl,emptySeat,tint,turnGlow,H,colors,spots,clock:S.clock,phaseAge:S.clock-S.phaseAt,stackSeat:S.stackSeat,stackAge:S.clock-S.stackAt,bidAge:S.clock-S.bidAt,flipAge:S.clock-S.flipAt,pointSeat:S.pointSeat,pointAge:S.clock-S.pointAt,reducedMotion:reducedMotion.matches});effects();eventFeedback();syncCanvasControls(canvas,spots,activateSpot,pressSpot,!!inputBlocked());if(qaMode&&window.render_game_to_text)canvas.dataset.gameState=window.render_game_to_text();return}
+  if(net.mode&&!(net.automaticEntry&&net.connecting&&!net.state)){drawTable({W,desktop,displayState:S.flipDisc&&S.clock-S.flipAt<1.45&&!reducedMotion.matches&&['loss','result','win'].includes(net.state?.stage)?S.flipDisplayState:null,header,panel,txt,button,disc,cardChoice,cardRect,stackChoice,navigation:syncNavigation,art,seatAvatar,cardCount,flowerBadge,seatControl,emptySeat,victoryFlourish,victoryCrown,tint,turnGlow,H,colors,spots,clock:S.clock,phaseAge:S.clock-S.phaseAt,stackSeat:S.stackSeat,stackAge:S.clock-S.stackAt,bidAge:S.clock-S.bidAt,flipAge:S.clock-S.flipAt,pointSeat:S.pointSeat,pointAge:S.clock-S.pointAt,reducedMotion:reducedMotion.matches});effects();eventFeedback();syncCanvasControls(canvas,spots,activateSpot,pressSpot,!!inputBlocked());if(qaMode&&window.render_game_to_text)canvas.dataset.gameState=window.render_game_to_text();return}
   if(desktop){
     const left=(W-Math.min(1080,W-80))/2,heroX=left+230,right=left+580;
     txt(names[0]+'  ✎',W-44,28,15,'#c9f5e8',800,'right',300);

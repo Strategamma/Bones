@@ -90,3 +90,7 @@ Play Online opens explicit room-code entry with a separate Create My Own Room ac
 Menu trigger markup stays stable between frames so pointer activation survives ongoing rendering. Reveal selection callbacks must refresh when switching between phone and desktop compositions.
 
 Remove the global Cards Left legend on both layouts. Keep the outlined-card icon/count on each player mat and the accessible player summary; no separate header or table legend.
+
+Empty-seat icon/label groups center using seat height. Desktop victory actions form one centered vertical group: Rematch, readiness, Manage Seats. Crown entrance and flower/star accents share mobile/desktop art; confetti ends after seven seconds and avoids winner text. Reduced motion keeps static decoration.
+
+Winner celebration: shared crown pops in, hops/tilts with squash-and-stretch, then settles by five seconds. Radial flower burst and soft rotating rays finish within seven seconds; static composition remains for reduced motion. Actions stay available throughout.

@@ -17,14 +17,15 @@ export function drawDesktopTable(ui,actions){
   ui.navigation([],leaveTable);
   center('VICTORY',89,28,'#f7f2e9',900);
   const heroY=Math.max(135,H*.23),heroX=cx-290;
-  art('victory-arcade',heroX,heroY,290,230);
+  ui.victoryFlourish(heroX+145,heroY+115,160);
+  ui.victoryCrown(heroX,heroY,290,230);
   txt(s.winner===me?'YOU WON!':'THE WINNER',cx+60,heroY+56,28,'#f7f2e9',900,'left',440);
   txt(s.seats[s.winner].name,cx+60,heroY+104,25,'#ffd981',900,'left',440);
   txt(s.resultKind==='flower'?'Two points. A beautiful bluff.':'Last player standing!',cx+60,heroY+150,15,'#91d9c7',800,'left',440);
-  const voted=s.seats.filter(p=>p.bot||p.rematchReady).length,already=!!mine.rematchReady,y=Math.max(heroY+285,H-156);
+  const voted=s.seats.filter(p=>p.bot||p.rematchReady).length,already=!!mine.rematchReady,y=Math.max(heroY+285,H-212);
   button('REMATCH',cx-180,y,360,56,net.features?.rematchVotes?already?null:()=>sendAction({type:host?'prepare-rematch':'rematch-ready'}):host?()=>sendAction({type:'rematch'}):null,already?'dark':'pink');
   center(net.features?.rematchVotes?`${voted}/${s.seats.length} players ready${already?' · You’re in!':''}`:host?'Play again together':'Waiting for the host',y+85,14,'#91d9c7');
-  if(host&&net.features?.returnLobby)button('MANAGE SEATS',layout.left+layout.boardWidth-200,y+8,200,44,()=>sendAction({type:'lobby'}),'dark');
+  if(host&&net.features?.returnLobby)button('MANAGE SEATS',cx-120,y+110,240,44,()=>sendAction({type:'lobby'}),'dark');
   return;
  }
  center(titles[s.stage]||'BONES',65,27,'#f7f2e9',900);

@@ -72,3 +72,7 @@ Online entry follow-up: home Play Online now keeps room-code entry open; Create 
 ## Legend removal follow-up
 
 Removed both phone and desktop global Cards Left legends; per-seat counts and accessible summaries remain. Rechecked desktop lobby, place, add, bidding, reveal introduction, loss, choose-lead, result, victory and pause screenshots at 1440×900; shared Menu opened/dismissed successfully. Phone add/hand/bids checked at 390×844. Earlier home/setup/error/settled-reveal/dialog checks above remain applicable; they were not all repeated for this cosmetic removal. Production build and layout tests passed. Screenshot: `output/player-experience/desktop-no-legend.jpg`.
+
+## Victory and empty-seat polish
+
+Desktop 1440×900 lobby: Add bot icon/label group visually centered. Victory inspected at 1440×900, 1024×768 reduced motion and 390×844 phone. Manage Seats centered beneath Rematch/readiness; activating it returned the host to lobby. Guest victory exposes Rematch without host controls. Crown entrance, static flower/star halo and bounded flower confetti inspected; no console errors. Build, four layout tests and diff check passed. These are controlled presentation fixtures, not a new multiplayer/device test.
