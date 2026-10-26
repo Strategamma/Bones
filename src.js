@@ -1,5 +1,5 @@
 import './style.css';
-import {syncNavigation} from './navigation.js';
+import {syncNavigation, configureInstall} from './navigation.js';
 import {arcadeEvents} from './arcade-events.js';
 import {pulse} from './haptics.js';
 let previousArcadeState=null;
@@ -28,13 +28,14 @@ standaloneMode.addEventListener('change',event=>{installed=event.matches||naviga
 addEventListener('beforeinstallprompt',event=>{event.preventDefault();installPrompt=event;draw()});
 addEventListener('appinstalled',()=>{installed=true;installPrompt=null;draw()});
 async function installApp(){
-  if(installPrompt){const prompt=installPrompt;installPrompt=null;await prompt.prompt();draw();return}
+  if(installPrompt){const prompt=installPrompt;installPrompt=null;try{await prompt.prompt();await prompt.userChoice;return}catch{ /* Fall back to browser instructions. */ }finally{draw()}}
   const dialog=document.createElement('dialog');dialog.id='install-help';
   const title=document.createElement('h2');title.textContent='INSTALL BONES';dialog.append(title);
   const message=document.createElement('p');message.textContent=!isSecureContext?'Install BONES from its public HTTPS page. Local Wi-Fi play still works here.':/iPad|iPhone|iPod/.test(navigator.userAgent)?'In Safari, tap Share, then Add to Home Screen.':'Open your browser menu and choose Install app or Add to Home Screen.';dialog.append(message);
   const close=document.createElement('button');close.textContent='GOT IT';close.onclick=()=>dialog.close();dialog.append(close);
   dialog.addEventListener('close',()=>dialog.remove());document.body.append(dialog);decorateDialog(dialog,'nav-home');dialog.showModal();
 }
+configureInstall(installApp,()=>installed);
 const S={phase:'menu',clock:0,hoverX:-100,hoverY:-100,hoverLabel:'',pressX:0,pressY:0,pressAt:-10,phaseKey:'',phaseAt:0,stackCounts:[],stackSeat:-1,stackAt:-10,bidValue:0,bidAt:-10,pointCounts:[],pointSeat:-1,pointAt:-10,soundStage:'',flipCount:0,flipAt:-10,flipDisc:'',flipOwner:-1,discardKey:'',discardAt:-10};
 let W=390,H=844,scale=1,verticalScale=1,displayScale=1,desktop=false,spots=[];
 const assetNames=['menu-box','text-box','player-mat','button-gold','button-pink','button-ink','card-back','card-flower','card-skull','reveal-safe','reveal-skull','table-lan','table-online','point-badge','winner-crown','card-flower-new','card-skull-new','card-back-new','bid-number-tile','bid-spotlight','search-announcement','skull-loss','card-discard','victory-arcade','arcade-nav','shared-table','hand-tray','discard-slot',...colorNames.map(name=>`seat-${name}`),'mascot-flower','mascot-skull',...['sound','mute','help','rooms','host','home'].map(name=>`nav-${name}`),...colorNames.map(name=>`card-played-${name}`),...colorNames.map(name=>`card-back-${name}`)];
@@ -206,7 +207,7 @@ function draw(){
  drawSamples.push({ms:performance.now()-start,reads:layoutReads});if(drawSamples.length>240)drawSamples.shift();
  if(drawSamples.length%10===0){const times=drawSamples.map(s=>s.ms).sort((a,b)=>a-b);canvas.dataset.renderProfile=JSON.stringify({samples:times.length,medianMs:+times[Math.floor(times.length*.5)].toFixed(3),p95Ms:+times[Math.floor(times.length*.95)].toFixed(3),meanLayoutReads:+(drawSamples.reduce((n,s)=>n+s.reads,0)/times.length).toFixed(1),stage:net.state?.stage||'home'});}
 }
-function syncHomeNavigation(){syncNavigation([[soundEnabled()?'SOUND':'MUTED',()=>{toggleSound();draw()},soundEnabled()?'sound':'mute'],['RULES',showRulebook,'help'],...(!installed?[['INSTALL BONES',installApp,'home']]:[]),net.connecting?['CANCEL CONNECTION',()=>leaveTable(true),'home']:['JOIN ONLINE ROOM',()=>openTable('internet',names[0],'',false,true),'rooms'],['DECADENCE ARCADE',returnToArcade,'home']]);}
+function syncHomeNavigation(){syncNavigation([[soundEnabled()?'SOUND':'MUTED',()=>{toggleSound();draw()},soundEnabled()?'sound':'mute'],['RULES',showRulebook,'help'],net.connecting?['CANCEL CONNECTION',()=>leaveTable(true),'home']:['JOIN ONLINE ROOM',()=>openTable('internet',names[0],'',false,true),'rooms'],['DECADENCE ARCADE',returnToArcade,'home']]);}
 function drawFrame(){
   if(!canvas.width)return;
   canvas.dataset.table=String(!!net.state);
